@@ -32,6 +32,7 @@
       "conversation_message_index_to_process": 0,
       "messages": [
         {
+          "sender_role": "end-user",
           "parts": [
             {
               "content_type": "text",

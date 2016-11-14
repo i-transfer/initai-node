@@ -99,12 +99,22 @@ InitClient.prototype.getStreamStack = function getStreamStack() {
  * @returns {MessagePart} messagePart - {@link MessagePart}
  */
 InitClient.prototype.getMessagePart = function getMessagePart() {
+  const currentMessage = this.getMessage()
+  const currentMessagePart = currentMessage.parts[0]
+
+  return currentMessagePart
+}
+
+/**
+ * Retrieve the current message for this invocation
+ * @returns {Message} message - {@link Message}
+ */
+InitClient.prototype.getMessage = function getMessage() {
   const messageToProcessIndex = this._messageContext.getIn(['current_conversation', 'conversation_message_index_to_process'])
   const messages = this._messageContext.getIn(['current_conversation', 'messages'])
   const currentMessage = messages.get(messageToProcessIndex)
-  const currentMessagePart = currentMessage.get('parts').get(0)
 
-  return currentMessagePart.toJS()
+  return currentMessage.toJS()
 }
 
 /**
@@ -218,19 +228,23 @@ InitClient.prototype.getPostbackData = function getMessageText() {
 }
 
 /**
-* Queues up a response using a pre-build response model constructed via the web console. Simply provide the respone name as the first argument and then data with wcich to hydrate that response template (optional).
+* Queues up a response using a pre-built response model constructed via training data. Simply provide the respone name as the first argument and then data with wcich to hydrate that response template (optional).
 * @param {string} responseName – The name of the slot (entity) to which this response is related.
 * @param {object} responseData - The data used to populate your response. Where each key maps to a slot name.
 * @returns {void}
 * @example <caption>Example usage:</caption>
-* client.addResponse('app:response:name:provide_weather', {foo: 'bar'})
-* client.addResponse('app:response:name:provide_weather', {condition: ['bar', 'baz', 'ben']})
-* client.addResponse('app:response:name:provide_weather', {'string/condition': 'sunny'})
-* client.addResponse('app:response:name:provide_weather/current', {'string/condition': 'sunny'})
+* client.addResponse('provide_weather', {foo: 'bar'})
+* client.addResponse('provide_weather', {condition: ['bar', 'baz', 'ben']})
+* client.addResponse('provide_weather', {'string/condition': 'sunny'})
+* client.addResponse('provide_weather/current', {'string/condition': 'sunny'})
 */
 InitClient.prototype.addResponse = function addResponse(responseName, responseData) {
   if (!isString(responseName)) {
     throw new Error(constants.Errors.INVALID_RESPONSE_NAME)
+  }
+
+  if (!InitClient.responseTemplatePrefixTest.test(responseName)) {
+    responseName = `${constants.ResponseTemplateTypes.RESPONSE_NAME}${responseName}`
   }
 
   this._messageResponsePartsQueue.push({
@@ -605,6 +619,8 @@ InitClient.prototype.done = function done() {
 }
 
 InitClient.constants = InitClient.prototype.constants = Immutable.fromJS(constants).toJS()
+
+InitClient.responseTemplatePrefixTest = new RegExp(`^${constants.ResponseTemplateTypes.RESPONSE_NAME}`)
 
 module.exports = {
   InitClient,

@@ -427,7 +427,7 @@ describe('InitClient', () => {
           {
           content_type: 'prepared-outbound-message',
           content: {
-            response_name: 'foobar',
+            response_name: 'app:response:name:foobar',
             response_data: null,
           },
           to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
@@ -445,13 +445,46 @@ describe('InitClient', () => {
           {
           content_type: 'prepared-outbound-message',
           content: {
-            response_name: 'foobar',
+            response_name: 'app:response:name:foobar',
             response_data: {foo: 'bar'},
           },
           to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
           to_type: 'app_user_id',
-        }
-        )
+        })
+      })
+
+      it('prepends namespace prefix if missing', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        client.addResponse('foo', {foo: 'bar'})
+
+        expect(client._messageResponsePartsQueue[0]).to.deep.equal(
+          {
+          content_type: 'prepared-outbound-message',
+          content: {
+            response_name: 'app:response:name:foo',
+            response_data: {foo: 'bar'},
+          },
+          to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+          to_type: 'app_user_id',
+        })
+      })
+
+      it('does not replace embedded namespace prefix', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        client.addResponse('foo:app:response:name', {foo: 'bar'})
+
+        expect(client._messageResponsePartsQueue[0]).to.deep.equal(
+          {
+          content_type: 'prepared-outbound-message',
+          content: {
+            response_name: 'app:response:name:foo:app:response:name',
+            response_data: {foo: 'bar'},
+          },
+          to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+          to_type: 'app_user_id',
+        })
       })
     })
 
@@ -718,7 +751,6 @@ describe('InitClient', () => {
         const client = new InitClient(fakeMessageContext, fakeLambdaContext)
 
         let fetchedState = client.getConversationState()
-        console.log('fetchedState:', fetchedState)
         expect(fetchedState).to.deep.equal({
           onboarding_complete: true,
           onboarding_welcome_sent: true,
@@ -1183,12 +1215,20 @@ describe('InitClient', () => {
             LINK: 'link',
             POSTBACK: 'postback',
           },
+          ResponseTemplateTypes: {
+            RESPONSE_NAME: 'app:response:name:',
+          },
           ResponseTypes: {
             PREPARED_OUTBOUND: 'prepared-outbound-message',
             IMAGE: 'image',
             TEXT: 'text',
             TEXT_TEMPLATE: 'text_template',
             CAROUSEL_LIST: 'carousel_list',
+          },
+          ParticipantRoles: {
+            APP: 'app',
+            AGENT: 'agent',
+            END_USER: 'end-user',
           },
           ScriptCollections: {
             DEFAULT: 'scripts',
@@ -1244,6 +1284,9 @@ describe('InitClient', () => {
             LINK: 'link',
             POSTBACK: 'postback',
           },
+          ResponseTemplateTypes: {
+            RESPONSE_NAME: 'app:response:name:',
+          },
           ResponseTypes: {
             PREPARED_OUTBOUND: 'prepared-outbound-message',
             IMAGE: 'image',
@@ -1251,10 +1294,39 @@ describe('InitClient', () => {
             TEXT_TEMPLATE: 'text_template',
             CAROUSEL_LIST: 'carousel_list',
           },
+          ParticipantRoles: {
+            APP: 'app',
+            AGENT: 'agent',
+            END_USER: 'end-user',
+          },
           ScriptCollections: {
             DEFAULT: 'scripts',
           },
         })
+      })
+    })
+
+    describe('responseTemplatePrefixTest', () => {
+      it('assigns a RegExp', () => {
+        expect(InitClient.responseTemplatePrefixTest instanceof RegExp).to.equal(true)
+      })
+
+      it('returns true if RESPONSE_NAME string is present', () => {
+        const result = InitClient.responseTemplatePrefixTest.test('app:response:name:foo')
+
+        expect(result).to.equal(true)
+      })
+
+      it('returns false if RESPONSE_NAME string is not present', () => {
+        const result = InitClient.responseTemplatePrefixTest.test('foo')
+
+        expect(result).to.equal(false)
+      })
+
+      it('returns false if string does not start with RESPONSE_NAME', () => {
+        const result = InitClient.responseTemplatePrefixTest.test('foo:app:response:name:')
+
+        expect(result).to.equal(false)
       })
     })
   })

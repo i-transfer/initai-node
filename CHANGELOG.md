@@ -1,3 +1,8 @@
+# 0.0.7 / 2016-11-14
+
+* Add initial support for processing messages based on participant role
+* Allow un-prefixed response template names in `addResponse` method
+
 # 0.0.6 / 2016-10-24
 
 * Configure build for `initai-node` release

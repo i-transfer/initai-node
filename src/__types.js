@@ -90,6 +90,13 @@ client.runFlow(flowDefinition)
 */
 
 /**
+* A specific Message
+* @typedef {Object} Message
+* @property {string} sender_role - The role in the conversation of the entity that sent the message
+* @property {array<MessagePart>} parts - The parts of the current message. Currently only one part is returned even the current message has more than one part.
+*/
+
+/**
 * @typedef ResponseStatePayload
 * @property {string} execution_id - The id of this code run
 * @property {object} conversation_state - The latest version of your conversation state

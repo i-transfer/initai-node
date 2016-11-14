@@ -24,12 +24,20 @@ module.exports = {
     LINK: 'link',
     POSTBACK: 'postback',
   },
+  ResponseTemplateTypes: {
+    RESPONSE_NAME: 'app:response:name:',
+  },
   ResponseTypes: {
     PREPARED_OUTBOUND: 'prepared-outbound-message',
     IMAGE: 'image',
     TEXT: 'text',
     TEXT_TEMPLATE: 'text_template',
     CAROUSEL_LIST: 'carousel_list',
+  },
+  ParticipantRoles: {
+    APP: 'app',
+    AGENT: 'agent',
+    END_USER: 'end-user',
   },
   ScriptCollections: {
     DEFAULT: 'scripts',

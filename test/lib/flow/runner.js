@@ -6,6 +6,7 @@ const initClient = require('../../../src/index')
 const messageContext = require('../../helpers/message-context')
 const messageEventContext = require('../../helpers/message-event-context')
 const logger = require('../../../src/logger')
+const constants = require('../../../src/util/constants')
 
 const Flow = flowRunner.Flow
 
@@ -18,8 +19,9 @@ describe('flowRunner', () => {
 
   beforeEach(() => {
     fakeFlowDefinition = {
-      classifications: [],
+      classifications: {},
       streams: {},
+      senderRolesToProcess: [constants.ParticipantRoles.END_USER],
     }
 
     fakeMessageContext = Immutable.fromJS(messageContext).toJS()
@@ -162,6 +164,7 @@ describe('flowRunner', () => {
 
         beforeEach(() => {
           Flow.prototype.initialize.restore()
+          Flow.prototype.isValidSenderRole = sandbox.stub().returns(true)
           flow = new Flow(fakeFlowDefinition, fakeClient)
         })
 
@@ -191,6 +194,7 @@ describe('flowRunner', () => {
 
         beforeEach(() => {
           Flow.prototype.initialize.restore()
+          Flow.prototype.isValidSenderRole = sandbox.stub().returns(true)
           flow = new Flow(fakeFlowDefinition, fakeClientWithEvent)
         })
 
@@ -214,7 +218,44 @@ describe('flowRunner', () => {
           expect(flow.handleEvent).to.have.been.called
         })
       })
+    })
 
+    describe('isValidSenderRole', () => {
+      describe('true', () => {
+        it('if sender role is included in senderRolesToProcess map', () => {
+          const currentMessage = {sender_role: 'end-user'}
+          const rolesToProcess = {'end-user': true}
+          const result = Flow.prototype.isValidSenderRole.call({}, currentMessage, rolesToProcess)
+
+          expect(result).to.equal(true)
+        })
+
+        it('if Message does not contain sender_role', () => {
+          const currentMessage = {}
+          const rolesToProcess = {'end-user': true}
+          const result = Flow.prototype.isValidSenderRole.call({}, currentMessage, rolesToProcess)
+
+          expect(result).to.equal(true)
+        })
+
+        it('if Message sender_role is falsey', () => {
+          const currentMessage = {sender_role: undefined}
+          const rolesToProcess = {'end-user': true}
+          const result = Flow.prototype.isValidSenderRole.call({}, currentMessage, rolesToProcess)
+
+          expect(result).to.equal(true)
+        })
+      })
+
+      describe('false', () => {
+        it('if sender role is not included in rolesToProcess', () => {
+          const currentMessage = {sender_role: 'other-user'}
+          const rolesToProcess = {'end-user': true}
+          const result = Flow.prototype.isValidSenderRole.call({}, currentMessage, rolesToProcess)
+
+          expect(result).to.equal(false)
+        })
+      })
     })
 
     describe('runFirstStep', () => {

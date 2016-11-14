@@ -36,13 +36,34 @@ function Flow(definition, client) {
   this.autoResponses = definition.autoResponses || {}
   this.eventHandlers = definition.eventHandlers || {}
 
-  this.initialize()
+  const senderRolesToProcess = (
+    definition.senderRolesToProcess || [this.client.constants.ParticipantRoles.END_USER]
+  ).reduce((roles, role) => {
+    roles[role] = true
+    return roles
+  }, {})
+
+  if (this.isValidSenderRole(this.client.getMessage(), senderRolesToProcess)) {
+    this.initialize()
+  } else {
+    this.client.done()
+  }
+}
+
+Flow.prototype.isValidSenderRole = function isValidSenderRole(currentMessage, rolesToProcess) {
+  if (currentMessage.sender_role) {
+    return Boolean(
+      rolesToProcess &&
+      rolesToProcess[currentMessage.sender_role]
+    )
+  } else {
+    return true
+  }
 }
 
 Flow.prototype.initialize = function initialize() {
   const currentMessagePart = this.client.getMessagePart()
   const currentMessagePartContentType = currentMessagePart.content_type
-
 
   switch (currentMessagePartContentType) {
     case this.client.constants.MessageTypes.EVENT:
