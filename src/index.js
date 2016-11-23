@@ -142,13 +142,13 @@ InitClient.prototype.getMessageText = function getMessageText() {
 * @returns {SlotValue|null} The slot value for this entity and role
 */
 InitClient.prototype.getFirstEntityWithRole = function getFirstEntityWithRole(messagePart, entity, role) {
-  if (!messagePart) {
-    this.logError('getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+  if (!messagePart || !isObject(messagePart)) {
+    this.logError('getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
     return null
   }
 
   if (!entity) {
-    this.logError('getFirstEntityWithRole: A valid entity (String) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+    this.logError('getFirstEntityWithRole: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
     return null
   }
 
@@ -171,13 +171,13 @@ InitClient.prototype.getFirstEntityWithRole = function getFirstEntityWithRole(me
 * @returns {SlotValues|null} The slot values corresponding to this entity
 */
 InitClient.prototype.getEntities = function getEntities(messagePart, entity) {
-  if (!messagePart) {
-    this.logError('getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+  if (!messagePart || !isObject(messagePart)) {
+    this.logError('getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
     return null
   }
 
   if (!entity) {
-    this.logError('getEntities: A valid entity (String) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+    this.logError('getEntities: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
     return null
   }
 
@@ -469,6 +469,16 @@ InitClient.prototype.updateConversationState = function updateConversationState(
   }
 
   return this._messageContext.toJS()
+}
+
+/**
+* Reset the conversation state to an empty Immtuable Map.
+*/
+InitClient.prototype.resetConversationState = function resetConversationState() {
+  this._messageContext = this._messageContext.setIn(
+    ['current_conversation', 'state'],
+    Immutable.Map()
+  )
 }
 
 /**

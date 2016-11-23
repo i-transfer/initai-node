@@ -6,6 +6,7 @@ const constants = require('../../../src/util/constants')
 const jiff = require('jiff')
 const assign = require('lodash').assign
 const messageContext = require('../../helpers/message-context')
+const messageContextWithoutState = require('../../helpers/message-context-default-state')
 const messageEventContext = require('../../helpers/message-event-context')
 const flowRunner = require('../../../src/flow/runner')
 const logger = require('../../../src/logger')
@@ -186,7 +187,15 @@ describe('InitClient', () => {
           const fakeContext = {logError: sandbox.stub()}
           const result = InitClient.prototype.getEntities.call(fakeContext)
 
-          expect(fakeContext.logError).to.have.been.calledWith('getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+          expect(fakeContext.logError).to.have.been.calledWith('getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
+          expect(result).to.equal(null)
+        })
+
+        it('logs an error if a messagePart is not an Object', () => {
+          const fakeContext = {logError: sandbox.stub()}
+          const result = InitClient.prototype.getEntities.call(fakeContext, 'foo')
+
+          expect(fakeContext.logError).to.have.been.calledWith('getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
           expect(result).to.equal(null)
         })
 
@@ -195,7 +204,7 @@ describe('InitClient', () => {
           const fakeContext = {logError: sandbox.stub()}
           const result = InitClient.prototype.getEntities.call(fakeContext, fakeMessagePart)
 
-          expect(fakeContext.logError).to.have.been.calledWith('getEntities: A valid entity (String) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+          expect(fakeContext.logError).to.have.been.calledWith('getEntities: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
           expect(result).to.equal(null)
         })
       })
@@ -266,7 +275,17 @@ describe('InitClient', () => {
           const client = new InitClient(fakeMessageContext, fakeLambdaContext)
           const result = client.getFirstEntityWithRole()
 
-          expect(client.logError).to.have.been.calledWith('getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+          expect(client.logError).to.have.been.calledWith('getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
+          expect(result).to.equal(null)
+        })
+
+        it('logs an error when no MessagePart is not an Object', () => {
+          sandbox.stub(InitClient.prototype, 'logError')
+
+          const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+          const result = client.getFirstEntityWithRole('foo')
+
+          expect(client.logError).to.have.been.calledWith('getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
           expect(result).to.equal(null)
         })
 
@@ -277,7 +296,7 @@ describe('InitClient', () => {
           const client = new InitClient(fakeMessageContext, fakeLambdaContext)
           const result = client.getFirstEntityWithRole(fakeMessagePart)
 
-          expect(client.logError).to.have.been.calledWith('getFirstEntityWithRole: A valid entity (String) is required. View the docs for more: https://docs.init.ai/reference/client-api.html')
+          expect(client.logError).to.have.been.calledWith('getFirstEntityWithRole: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
           expect(result).to.equal(null)
         })
       })
@@ -859,6 +878,27 @@ describe('InitClient', () => {
             },
           },
         })
+      })
+    })
+
+    describe('resetConversationState', () => {
+      it('clears existing conversation state', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        client.updateConversationState({onboarding_complete: '123'})
+
+        client.resetConversationState()
+
+        expect(client.getConversationState()).to.deep.equal({})
+      })
+
+      it('resets default state', () => {
+        const fakeMessageContextWithoutState = Immutable.fromJS(messageContextWithoutState).toJS()
+        const client = new InitClient(fakeMessageContextWithoutState, fakeLambdaContext)
+
+        client.resetConversationState()
+
+        expect(client.getConversationState()).to.deep.equal({})
       })
     })
   })

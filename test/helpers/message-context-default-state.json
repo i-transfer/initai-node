@@ -1,0 +1,167 @@
+{
+  "version": "1",
+  "format": "plain_object",
+  "payload": {
+    "execution_data": {
+      "execution_id": "au5m8lfu31ktu9xv3tphpl48cawo0yho",
+      "execution_mode": "",
+      "initiated_at": "2016-05-26T18:41:48.013930269-04:00",
+      "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiI0ZWU1OTMwYS01YjM3LTQ1NTEtNzYxNS04YjdlMWQ2YjdhNTYiLCJleHAiOjE0NjQzMDYxMDgsImlhdCI6MTQ2NDMwMjUwOCwiaW52b2NhdGlvbl9pZCI6ImF1NW04bGZ1MzFrdHU5eHYzdHBocGw0OGNhd28weWhvIiwiaXNzIjoicGxhdGZvcm0iLCJzY29wZXMiOlsicmVtb3RlIl0sInR5cGUiOiJzY3JpcHQifQ.VrOwo1TjbSlOy7UAUJjjloOGekP1AQdEtdH73lpUx0U",
+      "api": {
+        "base_url": "https://init-dev-k.ngrok.io"
+      },
+      "logging": {
+        "level": "DEBUG"
+      },
+      "conversation_message_index_to_process": 0
+    },
+    "scripts": {
+      "index.js": {
+        "id": "31fef079-1f54-45f0-76ae-f34f58fbf62d",
+        "source_code": "// INIT_VERSION: 0.0.15\n\n'use strict'\n\nconst _ = require('lodash')\n\nexports.handle = function handle(client) {\n\n  const sayHello = client.createStep({\n    satisfied() {\n      return Boolean(client.getConversationState().helloSent)\n    },\n\n    prompt() {\n      client.addTextResponse('Hello world')\n      return 'init.proceed'\n    }\n  })\n\n  const untrained = client.createStep({\n    satisfied() {\n      return false\n    },\n\n    prompt() {\n      client.addTextResponse('Apologies, but this app needs to go back to school!')\n      client.done()\n    }\n  })\n\n  client.runFlow({\n    classifications: {\n\n    },\n    autoResponses: {\n      _continuation: {\n        ignore: true,\n        minimumConfidence: 0.9\n      },\n      welcome: {\n        minimumConfidence: 0.5\n      },\n      you_are_welcome: {\n        minimumConfidence: 0.5\n      }\n    },\n    streams: {\n      end: [untrained],\n      main: [sayHello],\n    }\n  })\n}\n",
+        "md5": "c70c4e05d6b61c9b6c077928cd560c70"
+      }
+    },
+    "common_scripts": null,
+    "current_conversation": {
+      "state": null,
+      "id": "",
+      "conversation_message_index_to_process": 0,
+      "messages": [
+        {
+          "sender_role": "end-user",
+          "parts": [
+            {
+              "content_type": "text",
+              "content": "what's going on with southwest 244, taking off from denver?",
+              "classification": {
+                "overall_confidence": 0.9958628634821668,
+                "base_type": {
+                  "confidence": 0,
+                  "value": "check_status"
+                },
+                "sub_type": {
+                  "confidence": 0,
+                  "value": ""
+                }
+              },
+              "predicted_next_message": {
+                "overall_confidence": 0.6898454340877052,
+                "direction": {
+                  "confidence": 0,
+                  "value": "output"
+                },
+                "base_type": {
+                  "confidence": 0,
+                  "value": "provide_status"
+                },
+                "sub_type": {
+                  "confidence": 0,
+                  "value": ""
+                },
+                "predicted_response": {
+                  "name": "provide_status",
+                  "auto_fill_capable": true
+                }
+              },
+              "slots": {
+                "airline": {
+                  "entity": "airline",
+                  "base_type": "string",
+                  "roles": [
+                    "generic"
+                  ],
+                  "values_by_role": {
+                    "generic": [
+                      {
+                        "value": "southwest",
+                        "raw_value": "southwest",
+                        "canonicalized": false,
+                        "parsed": null
+                      }
+                    ]
+                  }
+                },
+                "city": {
+                  "entity": "city",
+                  "base_type": "string",
+                  "roles": [
+                    "departure"
+                  ],
+                  "values_by_role": {
+                    "departure": [
+                      {
+                        "value": "denver",
+                        "raw_value": "denver",
+                        "canonicalized": false,
+                        "parsed": null
+                      }
+                    ]
+                  }
+                },
+                "flight_number": {
+                  "entity": "flight_number",
+                  "base_type": "string",
+                  "roles": [
+                    "generic"
+                  ],
+                  "values_by_role": {
+                    "generic": [
+                      {
+                        "value": "244",
+                        "raw_value": "244",
+                        "canonicalized": false,
+                        "parsed": null
+                      },
+                      {
+                        "value": ",",
+                        "raw_value": ",",
+                        "canonicalized": false,
+                        "parsed": null
+                      }
+                    ]
+                  }
+                }
+              },
+              "sentiment": {
+                "phrase": "",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ],
+      "__private_temp_user_id": "23eeee22-4fdf-40b9-48b3-57ea2b200876"
+    },
+    "users": {
+      "23eeee22-4fdf-40b9-48b3-57ea2b200876": {
+        "app_id": "4ee5930a-5b37-4551-7615-8b7e1d6b7a56",
+        "id": "23eeee22-4fdf-40b9-48b3-57ea2b200876",
+        "platform_user_id": "8f6b2f33-420d-469f-6ef7-d2693a7dff2c",
+        "remote_id": null,
+        "first_name": "",
+        "last_name": "",
+        "metadata": null,
+        "minimum_token_issued_at": 0,
+        "created_at": "2016-04-27T18:17:54.582669-04:00",
+        "updated_at": "2016-04-27T18:17:54.582669-04:00",
+        "deleted_at": null
+      }
+    },
+    "current_application": {
+      "internal_name": "",
+      "id": "4ee5930a-5b37-4551-7615-8b7e1d6b7a56",
+      "external_name": "",
+      "environment": {
+        "common": {
+          "externalAppName": "LocalGitApp1"
+        },
+        "one": {
+          "two": {
+            "three": "MyEnvValue"
+          }
+        }
+      }
+    }
+  }
+}

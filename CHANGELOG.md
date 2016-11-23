@@ -1,3 +1,10 @@
+# 0.0.8 / 2016-11-22
+
+* Improve error messaging when MessagePart is not passed to entity helper methods
+* Add `resetConversationState` method
+  * See (docs)[https://docs.init.ai/docs/client-api-methods#section-resetconversationState]
+* Fix broken docs links in `getEntities` and `getFirstEntityWithRole` error output
+
 # 0.0.7 / 2016-11-14
 
 * Add initial support for processing messages based on participant role
