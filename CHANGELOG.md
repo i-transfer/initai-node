@@ -1,3 +1,8 @@
+# 0.0.9 / 2016-12-01
+
+* Add `getEnvironment` method
+* Add deprecation warning to `getCurrentApplicationEnvironment` method
+
 # 0.0.8 / 2016-11-22
 
 * Improve error messaging when MessagePart is not passed to entity helper methods

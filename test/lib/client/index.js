@@ -1190,6 +1190,10 @@ describe('InitClient', () => {
     })
 
     describe('getCurrentApplicationEnvironment', () => {
+      beforeEach(() => {
+        sandbox.stub(InitClient.prototype, 'logWarning')
+      })
+
       it('returns a collection of environment vars', () => {
         const client = new InitClient(fakeMessageContext, fakeLambdaContext)
 
@@ -1221,6 +1225,51 @@ describe('InitClient', () => {
               three: 'MyEnvValue',
             },
           },
+        })
+      })
+
+      it('logs a deprecation warning', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        const result = client.getCurrentApplicationEnvironment()
+        expect(client.logWarning).to.have.been.calledWith(`getCurrentApplicationEnvironment is deprecated and will be removed in a future version.\n\nPlease use the getEnvironment method\nhttps://docs.init.ai/docs/client-api-methods#section-getenvironment`)
+      })
+    })
+
+    describe('getEnvironment', () => {
+      it('returns an Object', () => {
+        fakeMessageContext.payload.current_application.environment = {
+          common: {externalAppName: ''},
+          foo: 'bar'
+        }
+
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        const result = client.getEnvironment()
+
+        expect(result).to.deep.equal({
+          common: {externalAppName: ''},
+          foo: 'bar'
+        })
+      })
+
+      it('scrubs keys with empty|null values', () => {
+        fakeMessageContext.payload.current_application.environment = {
+          common: {externalAppName: ''},
+          foo: 'bar',
+          baz: '',
+          qux: null,
+          quux: '',
+          corge: 'grault',
+          garply: {},
+        }
+
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        const result = client.getEnvironment()
+
+        expect(result).to.deep.equal({
+          common: {externalAppName: ''},
+          foo: 'bar',
+          corge: 'grault',
+          garply: {},
         })
       })
     })

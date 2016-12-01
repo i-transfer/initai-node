@@ -553,7 +553,26 @@ InitClient.prototype.getCurrentApplication = function getCurrentApplication() {
 * @returns {object}
 */
 InitClient.prototype.getCurrentApplicationEnvironment = function getCurrentApplicationEnvironment() {
+  this.logWarning(`getCurrentApplicationEnvironment is deprecated and will be removed in a future version.\n\nPlease use the getEnvironment method\nhttps://docs.init.ai/docs/client-api-methods#section-getenvironment`)
   return this._messageContext.get('current_application').get('environment').toJS()
+}
+
+/**
+ * Retrieve assigned environment variables set for current application
+ * @returns  {object}
+ */
+InitClient.prototype.getEnvironment = function getEnvironment() {
+  const environemntVariables = this._messageContext.get('current_application').get('environment').toJS()
+
+  return Object.keys(environemntVariables).reduce((newEnvironmentVariables, key) => {
+    const value = environemntVariables[key]
+
+    if (value) {
+      newEnvironmentVariables[key] = value
+    }
+
+    return newEnvironmentVariables
+  }, {})
 }
 
 /**
