@@ -1,3 +1,9 @@
+# 0.0.10 / 2017-01-27
+
+* Support sending quick replies
+  * Add `addResponseWithReplies` which sends a templated message with quick replies
+  * Add `makeReplyButton` to create a quick reply structure
+
 # 0.0.9 / 2016-12-01
 
 * Add `getEnvironment` method
@@ -7,7 +13,7 @@
 
 * Improve error messaging when MessagePart is not passed to entity helper methods
 * Add `resetConversationState` method
-  * See (docs)[https://docs.init.ai/docs/client-api-methods#section-resetconversationState]
+  * See [docs](https://docs.init.ai/docs/client-api-methods#section-resetconversationState)
 * Fix broken docs links in `getEntities` and `getFirstEntityWithRole` error output
 
 # 0.0.7 / 2016-11-14

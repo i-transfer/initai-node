@@ -228,9 +228,9 @@ InitClient.prototype.getPostbackData = function getMessageText() {
 }
 
 /**
-* Queues up a response using a pre-built response model constructed via training data. Simply provide the respone name as the first argument and then data with wcich to hydrate that response template (optional).
-* @param {string} responseName – The name of the slot (entity) to which this response is related.
-* @param {object} responseData - The data used to populate your response. Where each key maps to a slot name.
+* Queues a message to be sent using a prepared example from the application training data. Provide the message classicication as the first argument and data with which to populate slots second.
+* @param {string} responseName – The name of the message classification to send
+* @param {object} responseData - The data used to populate message slots (if any). Each key maps to a slot name.
 * @returns {void}
 * @example <caption>Example usage:</caption>
 * client.addResponse('provide_weather', {foo: 'bar'})
@@ -274,6 +274,66 @@ InitClient.prototype.addTextResponse = function addTextResponse(responseMessage)
     to: this.getMessagePart().sender.id,
     to_type: constants.IdTypes.APP_USER_ID,
   })
+}
+
+/**
+* Variant of addResponse that supports sending quick reply buttons as suggestions to the user.
+* @param {string} responseName – The name of the message classification to send
+* @param {object} responseData - The data used to populate message slots (if any). Each key maps to a slot name.
+* @param {array of objects} replies - List of quick replies to be offered to the user
+* @returns {void}
+* @example <caption>Example usage:</caption>
+* client.addResponseWithReplies('provide_weather', {foo: 'bar'}, replies)
+* client.addResponseWithReplies('provide_weather', {condition: ['bar', 'baz', 'ben']}, replies)
+* client.addResponseWithReplies('provide_weather', {'string/condition': 'sunny'}, replies)
+* client.addResponseWithReplies('provide_weather/current', {'string/condition': 'sunny'}, replies)
+*
+* replies: [client.makeReplyButton(...), ...]
+*
+*/
+InitClient.prototype.addResponseWithReplies = function addResponseWithReplies(responseName, responseData, replies) {
+  if (!isString(responseName)) {
+    throw new Error(constants.Errors.INVALID_RESPONSE_NAME)
+  }
+
+  if (!InitClient.responseTemplatePrefixTest.test(responseName)) {
+    responseName = `${constants.ResponseTemplateTypes.RESPONSE_NAME}${responseName}`
+  }
+
+  this._messageResponsePartsQueue.push({
+    content_type: constants.ResponseTypes.PREPARED_OUTBOUND_WITH_REPLIES,
+    content: {
+      response_name: responseName,
+      response_data: responseData || null,
+      replies_content: replies || [],
+      },
+    to: this.getMessagePart().sender.id,
+    to_type: constants.IdTypes.APP_USER_ID,
+  })
+}
+
+/**
+* Creates a Reply Button object to be passed to addResponseWithReplies
+* @param {string} text – Button text
+* @param {string} iconUrl – URL to icon
+* @param {string} stream - Stream name to route the reply to
+* @param {object} data - Arbitrary data
+* @returns {object}
+* @example <caption>Example usage:</caption>
+* client.addResponseWithReplies('provide_weather', {foo: 'bar'}, [client.makeReplyButton('Next day', 'https://../icon.png', 'check_weather', {})])
+*
+*/
+InitClient.prototype.makeReplyButton = function makeReplyButton(text, iconUrl, stream, data) {
+  return {
+    type: constants.ActionTypes.REPLY,
+    text: text,
+    icon_url: iconUrl,
+    payload: {
+      data,
+      version: '1',
+      stream: stream,
+    },
+  }
 }
 
 /**

@@ -507,6 +507,94 @@ describe('InitClient', () => {
       })
     })
 
+    describe('addResponseWithReplies', () => {
+      it('throws an error if a responseName is not provided', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        function run() {
+          client.addResponseWithReplies()
+        }
+
+        expect(run).to.throw('A valid response name must be provided')
+      })
+
+      it('pushes response onto queue', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        const replies = client.makeReplyButton('reply text', 'icon url', 'stream name', {key: 'value'})
+        client.addResponseWithReplies('foobar', null, replies)
+
+        expect(client._messageResponsePartsQueue[0]).to.deep.equal(
+          {
+          content_type: constants.ResponseTypes.PREPARED_OUTBOUND_WITH_REPLIES,
+          content: {
+            response_name: 'app:response:name:foobar',
+            response_data: null,
+            replies_content: replies,
+          },
+          to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+          to_type: 'app_user_id',
+        }
+        )
+      })
+
+      it('pushes response onto queue with data', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        const replies = client.makeReplyButton('reply text', 'icon url', 'stream name', {key: 'value'})
+        client.addResponseWithReplies('foobar', {foo: 'bar'}, replies)
+
+        expect(client._messageResponsePartsQueue[0]).to.deep.equal(
+          {
+          content_type: constants.ResponseTypes.PREPARED_OUTBOUND_WITH_REPLIES,
+          content: {
+            response_name: 'app:response:name:foobar',
+            response_data: {foo: 'bar'},
+            replies_content: replies,
+          },
+          to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+          to_type: 'app_user_id',
+        })
+      })
+
+      it('prepends namespace prefix if missing', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        client.addResponseWithReplies('foo', {foo: 'bar'})
+
+        expect(client._messageResponsePartsQueue[0]).to.deep.equal(
+          {
+          content_type: constants.ResponseTypes.PREPARED_OUTBOUND_WITH_REPLIES,
+          content: {
+            response_name: 'app:response:name:foo',
+            response_data: {foo: 'bar'},
+            replies_content: [],
+          },
+          to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+          to_type: 'app_user_id',
+        })
+      })
+
+      it('does not replace embedded namespace prefix', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        const replies = client.makeReplyButton('reply text', 'icon url', 'stream name', {key: 'value'})
+        client.addResponseWithReplies('foo:app:response:name', {foo: 'bar'}, replies)
+
+        expect(client._messageResponsePartsQueue[0]).to.deep.equal(
+          {
+          content_type: constants.ResponseTypes.PREPARED_OUTBOUND_WITH_REPLIES,
+          content: {
+            response_name: 'app:response:name:foo:app:response:name',
+            response_data: {foo: 'bar'},
+            replies_content: replies,
+          },
+          to: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+          to_type: 'app_user_id',
+        })
+      })
+    })
+
     describe('addTextResponse', () => {
       it('throws an error if a message is not provided', () => {
         const client = new InitClient(fakeMessageContext, fakeLambdaContext)
@@ -1303,12 +1391,14 @@ describe('InitClient', () => {
           ActionTypes: {
             LINK: 'link',
             POSTBACK: 'postback',
+            REPLY: 'reply',
           },
           ResponseTemplateTypes: {
             RESPONSE_NAME: 'app:response:name:',
           },
           ResponseTypes: {
             PREPARED_OUTBOUND: 'prepared-outbound-message',
+            PREPARED_OUTBOUND_WITH_REPLIES: 'prepared-outbound-message-with-replies',
             IMAGE: 'image',
             TEXT: 'text',
             TEXT_TEMPLATE: 'text_template',
@@ -1372,12 +1462,14 @@ describe('InitClient', () => {
           ActionTypes: {
             LINK: 'link',
             POSTBACK: 'postback',
+            REPLY: 'reply',
           },
           ResponseTemplateTypes: {
             RESPONSE_NAME: 'app:response:name:',
           },
           ResponseTypes: {
             PREPARED_OUTBOUND: 'prepared-outbound-message',
+            PREPARED_OUTBOUND_WITH_REPLIES: 'prepared-outbound-message-with-replies',
             IMAGE: 'image',
             TEXT: 'text',
             TEXT_TEMPLATE: 'text_template',

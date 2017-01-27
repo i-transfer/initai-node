@@ -23,12 +23,14 @@ module.exports = {
   ActionTypes: {
     LINK: 'link',
     POSTBACK: 'postback',
+    REPLY: 'reply',
   },
   ResponseTemplateTypes: {
     RESPONSE_NAME: 'app:response:name:',
   },
   ResponseTypes: {
     PREPARED_OUTBOUND: 'prepared-outbound-message',
+    PREPARED_OUTBOUND_WITH_REPLIES: 'prepared-outbound-message-with-replies',
     IMAGE: 'image',
     TEXT: 'text',
     TEXT_TEMPLATE: 'text_template',
