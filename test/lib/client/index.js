@@ -51,6 +51,13 @@ describe('InitClient', () => {
       })
     })
 
+    describe('_user_metadata_updates', () => {
+      it('creates an empty cache store for metadata updates', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        expect(client._user_metadata_updates).to.deep.equal({})
+      })
+    })
+
     describe('_messageContext', () => {
       it('throws an error if message context is not provided', () => {
         function run() {
@@ -1026,6 +1033,11 @@ describe('InitClient', () => {
     })
 
     describe('updateUser', () => {
+      beforeEach(() => {
+        sandbox.stub(InitClient.prototype, 'logError')
+        sandbox.stub(InitClient.prototype, 'logWarning')
+      })
+
       it('throws if a valid user id is not provided', () => {
         const client = new InitClient(fakeMessageContext, fakeLambdaContext)
 
@@ -1046,109 +1058,360 @@ describe('InitClient', () => {
         expect(run).to.throw('A valid user id must be provided')
       })
 
-      it('updates the user with the provided id', () => {
-        let client, userBefore, userAfter
+      describe('merge strategies', () => {
+        describe('object literal', () => {
+          it('updates the user with the provided id', () => {
+            let client, userBefore, userAfter
 
-        fakeMessageContext.payload.users = {
-          '123': {
-            id: '123',
-          },
-          '456': {
-            id: '456',
-          },
-        }
-
-        client = new InitClient(fakeMessageContext, fakeLambdaContext)
-        userBefore = client.getUsers()['123']
-
-        client.updateUser('123', {foo: 'bar'})
-        userAfter = client.getUsers()['123']
-
-        expect(userBefore.foo).not.to.exist
-        expect(userAfter.foo).to.equal('bar')
-      })
-
-      it('performs a deep merge', () => {
-        let client
-        const fakeId = '456'// Object.keys(fakeMessageContext.payload.users)[0]
-
-        fakeMessageContext.payload.users[fakeId] = {
-          id: fakeId,
-          foo: {
-            bar: {
-              baz: {firstName: 'Gordon'},
-            },
-          },
-        }
-
-        client = new InitClient(fakeMessageContext, fakeLambdaContext)
-
-        client.updateUser('456', {
-          foo: {
-            bar: {
-              baz: {
-                lastName: 'Bombay',
+            fakeMessageContext.payload.users = {
+              '123': {
+                id: '123',
               },
-            },
-          },
+              '456': {
+                id: '456',
+              },
+            }
+
+            client = new InitClient(fakeMessageContext, fakeLambdaContext)
+            userBefore = client.getUsers()['123']
+
+            client.updateUser('123', {foo: 'bar'})
+            userAfter = client.getUsers()['123']
+
+            expect(userBefore.foo).not.to.exist
+            expect(userAfter.foo).to.equal('bar')
+          })
+
+          it('logs a deprecation warning', () => {
+            let client, userBefore, userAfter
+
+            fakeMessageContext.payload.users = {
+              '123': {id: '123'},
+              '456': {id: '456'},
+            }
+
+            client = new InitClient(fakeMessageContext, fakeLambdaContext)
+            userBefore = client.getUsers()['123']
+
+            client.updateUser('123', {foo: 'bar'})
+            userAfter = client.getUsers()['123']
+
+            expect(client.logWarning).to.have.been.calledWith(`updateUser using an Object literal or keypath is deprecated and will be removed in a future version. Please provide the following signature:
+
+  updateUser(id:String, key:String, value:Any)
+
+Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
+          })
         })
 
-        expect(client.getUsers()['456']).to.deep.equal({
-          id: fakeId,
-          foo: {
-            bar: {
-              baz: {
-                firstName: 'Gordon',
-                lastName: 'Bombay',
+        describe('deep merge', () => {
+          it('performs a deep merge', () => {
+            let client
+            const fakeId = '456'// Object.keys(fakeMessageContext.payload.users)[0]
+
+            fakeMessageContext.payload.users[fakeId] = {
+              id: fakeId,
+              foo: {
+                bar: {
+                  baz: {firstName: 'Gordon'},
+                },
               },
-            },
-          },
+            }
+
+            client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+            client.updateUser('456', {
+              foo: {
+                bar: {
+                  baz: {
+                    lastName: 'Bombay',
+                  },
+                },
+              },
+            })
+
+            expect(client.getUsers()['456']).to.deep.equal({
+              id: fakeId,
+              foo: {
+                bar: {
+                  baz: {
+                    firstName: 'Gordon',
+                    lastName: 'Bombay',
+                  },
+                },
+              },
+            })
+          })
+
+          it('deeply updates and sets values', () => {
+            const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+            const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+            client.updateUser(fakeId, ['foo', 'bar'], 'baz')
+
+            expect(client.getUsers()[fakeId]).to.deep.equal({
+              platform_user_id: '8f6b2f33-420d-469f-6ef7-d2693a7dff2c',
+              foo: {bar: 'baz'},
+              created_at: '2016-04-27T18:17:54.582669-04:00',
+              metadata: null,
+              minimum_token_issued_at: 0,
+              last_name: '',
+              remote_id: null,
+              updated_at: '2016-04-27T18:17:54.582669-04:00',
+              deleted_at: null,
+              app_id: '4ee5930a-5b37-4551-7615-8b7e1d6b7a56',
+              first_name: '',
+              id: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+            })
+          })
+
+          it('logs a persistence warning', () => {
+            const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+            const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+            client.updateUser(fakeId, ['foo', 'bar'], 'baz')
+
+            expect(client.getUsers()[fakeId]).to.deep.equal({
+              platform_user_id: '8f6b2f33-420d-469f-6ef7-d2693a7dff2c',
+              foo: {bar: 'baz'},
+              created_at: '2016-04-27T18:17:54.582669-04:00',
+              metadata: null,
+              minimum_token_issued_at: 0,
+              last_name: '',
+              remote_id: null,
+              updated_at: '2016-04-27T18:17:54.582669-04:00',
+              deleted_at: null,
+              app_id: '4ee5930a-5b37-4551-7615-8b7e1d6b7a56',
+              first_name: '',
+              id: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
+            })
+
+            expect(client.logWarning).to.have.been.calledWith(`You are attempting to update an immutable key. Only first_name, last_name, remote_id, and metadata may be updated. Your updates will not be persisted`)
+          })
+
+          it('logs a deprecation warning', () => {
+            const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+            const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+            client.updateUser(fakeId, ['foo', 'bar'], 'baz')
+
+            expect(client.logWarning).to.have.been.calledWith(`updateUser using an Object literal or keypath is deprecated and will be removed in a future version. Please provide the following signature:
+
+  updateUser(id:String, key:String, value:Any)
+
+Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
+          })
         })
-      })
 
-      it('deeply updates and sets values', () => {
-        const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
-        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        describe('key, value', () => {
+          describe('whitelisted keys', () => {
+            it('updates first_name', () => {
+              const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+              const client = new InitClient(fakeMessageContext, fakeLambdaContext)
 
-        client.updateUser(fakeId, ['foo', 'bar'], 'baz')
-        client.updateUser(fakeId, 'nux', {foo: 'tool'})
-        client.updateUser(fakeId, 'tunes', {royksopp: {location: {country: 'iceland'}}})
+              client.updateUser(fakeId, 'first_name', 'Foo')
 
-/*
- "23eeee22-4fdf-40b9-48b3-57ea2b200876": {
-        "app_id": "4ee5930a-5b37-4551-7615-8b7e1d6b7a56",
-        "id": "23eeee22-4fdf-40b9-48b3-57ea2b200876",
-        "platform_user_id": "8f6b2f33-420d-469f-6ef7-d2693a7dff2c",
-        "remote_id": null,
-        "first_name": "",
-        "last_name": "",
-        "metadata": null,
-        "minimum_token_issued_at": 0,
-        "created_at": "2016-04-27T18:17:54.582669-04:00",
-        "updated_at": "2016-04-27T18:17:54.582669-04:00",
-        "deleted_at": null
-      }
-*/
+              expect(client.getUsers()[fakeId].first_name).to.equal('Foo')
+            })
 
-        expect(client.getUsers()[fakeId]).to.deep.equal({
-          platform_user_id: '8f6b2f33-420d-469f-6ef7-d2693a7dff2c',
-          foo: {bar: 'baz'},
-          created_at: '2016-04-27T18:17:54.582669-04:00',
-          metadata: null,
-          minimum_token_issued_at: 0,
-          nux: {foo: 'tool'},
-          last_name: '',
-          remote_id: null,
-          updated_at: '2016-04-27T18:17:54.582669-04:00',
-          deleted_at: null,
-          app_id: '4ee5930a-5b37-4551-7615-8b7e1d6b7a56',
-          first_name: '',
-          id: '23eeee22-4fdf-40b9-48b3-57ea2b200876',
-          tunes: {
-            royksopp: {
-              location: {country: 'iceland'},
-            },
-          },
+            it('updates last_name', () => {
+              const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+              const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+              client.updateUser(fakeId, 'last_name', 'Bar')
+
+              expect(client.getUsers()[fakeId].last_name).to.equal('Bar')
+            })
+
+            it('updates remote_id', () => {
+              const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+              const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+              client.updateUser(fakeId, 'remote_id', 'baz123')
+
+              expect(client.getUsers()[fakeId].remote_id).to.equal('baz123')
+            })
+
+            describe('metadata', () => {
+              describe('writes', () => {
+                it('as Object', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', {foo: 'bar'})
+
+                  expect(client.getUsers()[fakeId].metadata).to.deep.equal({foo: 'bar'})
+                })
+
+                it('as null', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', null)
+
+                  expect(client.getUsers()[fakeId].metadata).to.deep.equal(null)
+                })
+              })
+
+              describe('does not write', () => {
+                it('as string', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', 'arbitrary string')
+
+                  expect(client.logError).to.have.been.calledWith(`Provided metadata value must be an Object or null`)
+                })
+
+                it('as Array', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', ['a', 'b'])
+
+                  expect(client.logError).to.have.been.calledWith(`Provided metadata value must be an Object or null`)
+                })
+
+                it('as Number', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', 22)
+
+                  expect(client.logError).to.have.been.calledWith(`Provided metadata value must be an Object or null`)
+                })
+
+                it('as Boolean', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', true)
+
+                  expect(client.logError).to.have.been.calledWith(`Provided metadata value must be an Object or null`)
+                })
+
+                it('as undefined', () => {
+                  const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', undefined)
+
+                  expect(client.logError).to.have.been.calledWith(`Provided metadata value must be an Object or null`)
+                })
+              })
+
+              describe('updates', () => {
+                it('replaces existing object', () => {
+                  const fakeId = 100
+
+                  fakeMessageContext.payload.users[fakeId] = {
+                    id: fakeId,
+                    metadata: {foo: 'bar'},
+                  }
+
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', {city: 'chicago'})
+
+                  expect(client.getUsers()[fakeId].metadata).to.deep.equal({city: 'chicago'})
+                })
+
+                it('replaces existing value', () => {
+                  const fakeId = 100
+
+                  fakeMessageContext.payload.users[fakeId] = {
+                    id: fakeId,
+                    metadata: 'some string',
+                  }
+
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', {city: 'chicago'})
+
+                  expect(client.getUsers()[fakeId].metadata).to.deep.equal({city: 'chicago'})
+                })
+              })
+
+              describe('update tracking', () => {
+                it('writes new metadata to _user_metadata_updates cache', () => {
+                  const fakeId = 100
+
+                  fakeMessageContext.payload.users[fakeId] = {
+                    id: fakeId,
+                    metadata: 'some string',
+                  }
+
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', {city: 'chicago'})
+
+                  expect(client._user_metadata_updates).to.deep.equal({100: {city: 'chicago'}})
+                })
+
+                it('overwrites cached updates', () => {
+                  const fakeId = 100
+
+                  fakeMessageContext.payload.users[fakeId] = {
+                    id: fakeId,
+                    metadata: 'some string',
+                  }
+
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(fakeId, 'metadata', {city: 'chicago'})
+                  client.updateUser(fakeId, 'metadata', {city: 'boston'})
+
+                  expect(client._user_metadata_updates).to.deep.equal({100: {city: 'boston'}})
+                })
+
+                it('writes updates for multiple users', () => {
+                  const ids = ['123', '456', '789']
+
+                  ids.forEach((id) => {
+                    fakeMessageContext.payload.users[id] = {
+                      id,
+                      metadata: id === `456` ? {city: 'boston', state: 'ma'} : null,
+                    }
+                  })
+
+                  const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+                  client.updateUser(ids[0], 'metadata', {city: 'chicago'})
+                  client.updateUser(ids[2], 'metadata', {city: 'detroit', teams: {
+                    baseball: 'tigers',
+                    basketball: 'pistons',
+                    football: 'lions',
+                    hockey: 'red wings',
+                  }})
+
+                  expect(client._user_metadata_updates).to.deep.equal({
+                    '123': {city: 'chicago'},
+                    '789': {
+                      city: 'detroit',
+                      teams: {
+                        baseball: 'tigers',
+                        basketball: 'pistons',
+                        football: 'lions',
+                        hockey: 'red wings',
+                      }
+                    },
+                  })
+                })
+              })
+            })
+          })
+
+          describe('blacklisted keys', () => {
+            it('logs a warning if a non-whitelisted key is used', () => {
+              const fakeId = Object.keys(fakeMessageContext.payload.users)[0]
+              const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+              client.updateUser(fakeId, 'id', 123094823)
+
+              expect(client.getUsers()[fakeId].id).to.equal(fakeId)
+              expect(client.logError).to.have.been.calledWith(`You are attempting to update an immutable key. Only first_name, last_name, remote_id, and metadata may be updated. Your updates will not be persisted`)
+            })
+          })
         })
       })
     })
@@ -1695,6 +1958,11 @@ describe('InitClient', () => {
   })
 
   describe('done', () => {
+    beforeEach(() => {
+      sandbox.stub(InitClient.prototype, 'logError')
+      sandbox.stub(InitClient.prototype, 'logWarning')
+    })
+
     it('signals termination to the λ function', () => {
       let client
 
@@ -1710,6 +1978,7 @@ describe('InitClient', () => {
           execution_id: 'foobar',
           conversation_state: sinon.match.object,
           conversation_state_patch: sinon.match.array,
+          user_metadata_updates: sinon.match.object,
           users_patch: sinon.match.array,
           reset_users: sinon.match.array,
           messages: [
@@ -1771,6 +2040,46 @@ describe('InitClient', () => {
           }
         }
       ])
+    })
+
+    describe('user_metadata_updates', () => {
+      it('writes updates', () => {
+        fakeMessageContext.payload.users = {
+          '123': {
+            id: '123',
+            first_name: 'dave'
+          }
+        }
+
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        client.updateUser('123', 'metadata', {city: 'Philadelphia'})
+
+        client.done()
+
+        expect(fakeLambdaContext.succeed.args[0][0].payload.user_metadata_updates).to.deep.equal({
+          123: {city: 'Philadelphia'}
+        })
+      })
+
+      it('writes empty object if no changes are applied to metadata', () => {
+        fakeMessageContext.payload.users = {
+          '123': {
+            id: '123',
+            first_name: 'dave',
+          },
+          '456': {
+            id: '456',
+            first_name: 'tony',
+          }
+        }
+
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        client.updateUser('456', 'first_name', 'frank')
+        client.done()
+
+        expect(fakeLambdaContext.succeed.args[0][0].payload.user_metadata_updates).to.deep.equal({})
+      })
     })
 
     describe('reset_users', () => {

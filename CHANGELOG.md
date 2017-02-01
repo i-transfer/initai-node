@@ -1,3 +1,9 @@
+# 0.0.11 / 2017-02-01
+
+* Restrict update strategies in `updateUser` method
+  * Add deprecation logging for keypath and object literal merges
+  * Add log warning for immutable keys that will not be persisted
+
 # 0.0.10 / 2017-01-27
 
 * Support sending quick replies

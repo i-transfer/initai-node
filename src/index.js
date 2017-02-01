@@ -9,7 +9,8 @@ const logger = require('./logger')
 const flowRunner = require('./flow/runner')
 const VERSION = process.env.VERSION
 
-const isObject = _.isObject
+// `isObject` returns true for Array values, `isPlainObject` is more strict
+const isObject = _.isPlainObject
 const isString = _.isString
 
 function _setupMessageContext(messageContext) {
@@ -41,6 +42,7 @@ function InitClient(messageContext, lambdaContext) {
   this._originalMessageContext = messageContext
   this._originalUsers = messageContext.payload.users
   this._usersToReset = []
+  this._user_metadata_updates = {}
 }
 
 InitClient.prototype.log = logger.log
@@ -280,7 +282,7 @@ InitClient.prototype.addTextResponse = function addTextResponse(responseMessage)
 * Variant of addResponse that supports sending quick reply buttons as suggestions to the user.
 * @param {string} responseName – The name of the message classification to send
 * @param {object} responseData - The data used to populate message slots (if any). Each key maps to a slot name.
-* @param {array of objects} replies - List of quick replies to be offered to the user
+* @param {array} replies - List of quick replies to be offered to the user
 * @returns {void}
 * @example <caption>Example usage:</caption>
 * client.addResponseWithReplies('provide_weather', {foo: 'bar'}, replies)
@@ -554,32 +556,65 @@ InitClient.prototype.getUsers = function getUsers() {
 /**
 * Update data for a specific user
 * @param {string} userId - The id of the user
-* @param {any} key - The key to set on the User model for later lookup (this can be any JS type, but usually is a String). If this key already exists, the associated value will be used to overwrite the currently set value.
-* @param {any} value - The value associated with the key
-* @example <caption>Using key, value pair</caption>
-* client.updateUser('123', 'name', 'Tony')
-* @example <caption>Using an object literal</caption>
-* client.updateUser('123', {name: 'Tony'})
-* @example <caption>Using a <a href="https://facebook.github.io/immutable-js/docs/#/Map/setIn">keypath</a> and value</caption>
-* client.updateUser('123', ['name', 'first'], 'Tony')
+* @param {key} key - The key to set or update. Only `first_name`, `last_name`, `remote_id`, and `metadata` may be updates.
+* @param {String|Object} value - The value associated with the key. This value is a String in all cases except when the `key` is `metadata` in which case it must be an Object or `null`.
+* @example <caption>Updating arbitrary metadata</caption>
+* // Note: Updating `metatada` is a replace operation and will not merge keys. Provide the full Object.
+* client.updateUser('123', 'metadata', {city: 'Chicago'})
+*
+* @example <caption>Update base user values</caption>
+* client.updateUser('123', 'first_name', 'jeremy')
+* client.updateUser('123', 'last_name', 'roenick')
+* client.updateUser('123', 'remote_id', '27')
 */
-InitClient.prototype.updateUser = function updateUser(id, objectOrKey, value) {
+InitClient.prototype.updateUser = function updateUser(id, strategy, value) {
   if (!id || !this.getUsers()[id]) {
     throw new Error(constants.Errors.INVALID_USER_ID_PROVIDED)
   }
 
-  if (isObject(objectOrKey) && !value) {
+  const whitelistedKeys = ['first_name', 'last_name', 'remote_id', 'metadata']
+  const updateStrategyWarningMessage = `updateUser using an Object literal or keypath is deprecated and will be removed in a future version. Please provide the following signature:
+
+  updateUser(id:String, key:String, value:Any)
+
+Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`
+  const immutableKeyWarningMessage = 'You are attempting to update an immutable key. Only first_name, last_name, remote_id, and metadata may be updated. Your updates will not be persisted'
+
+  if (isObject(strategy) && !value) {
+    this.logWarning(updateStrategyWarningMessage)
     this._messageContext = this._messageContext.updateIn(
       ['users', id],
       function (map) {
-        return map.mergeDeep(objectOrKey)
+        return map.mergeDeep(strategy)
       }
     )
+  } else if (Array.isArray(strategy)) {
+    this.logWarning(updateStrategyWarningMessage)
+
+    const keyPath = strategy
+
+    if (whitelistedKeys.indexOf(keyPath[0]) === -1) {
+      this.logWarning(immutableKeyWarningMessage)
+    }
+
+    this._messageContext = this._messageContext.setIn(['users', id].concat(keyPath), value)
   } else {
-    this._messageContext = this._messageContext.setIn(
-      ['users', id].concat(objectOrKey),
-      value
-    )
+    const key = strategy
+
+    if (whitelistedKeys.indexOf(key) !== -1) {
+      if (key === 'metadata') {
+        if (value !== null && !isObject(value)) {
+          this.logError('Provided metadata value must be an Object or null')
+          return this.getUsers()[id]
+        }
+
+        this._user_metadata_updates[id] = value
+      }
+
+      this._messageContext = this._messageContext.setIn(['users', id].concat(key), value)
+    } else {
+      this.logError(immutableKeyWarningMessage)
+    }
   }
 
   return this.getUsers()[id]
@@ -695,6 +730,7 @@ InitClient.prototype.done = function done() {
         this._originalMessageContext.payload.current_conversation.state,
         this.getConversationState()
       ),
+      user_metadata_updates: this._user_metadata_updates,
       users_patch: jiff.diff(
         this._originalUsers,
         this.getUsers()
