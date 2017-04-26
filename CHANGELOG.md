@@ -1,3 +1,7 @@
+# 0.0.12 / 2017-04-26
+
+* Update README to include new platform features
+
 # 0.0.11 / 2017-02-01
 
 * Restrict update strategies in `updateUser` method
