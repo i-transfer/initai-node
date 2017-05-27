@@ -858,6 +858,17 @@ describe('InitClient', () => {
           myStreamName: ['a', 'b'],
         })
       })
+
+      it('overwrites existing expectations', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        client.expect('myStreamName', ['a', 'b'])
+        client.expect('myStreamName2', ['c', 'd'])
+
+        expect(client.getConversationState().currentExpectations).to.deep.equal({
+          myStreamName2: ['c', 'd'],
+        })
+      })
     })
 
     describe('getConversationState', () => {

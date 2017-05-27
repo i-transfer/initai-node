@@ -1,6 +1,6 @@
 {
   "name": "initai-node",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "Manage conversation and event invocations and construct replies.",
   "main": "src/index.js",
   "scripts": {

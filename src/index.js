@@ -481,10 +481,8 @@ InitClient.prototype.expect = function expect(streamName, classifications) {
 
   logger.log('Recording expection of stream', streamName, 'to receive classifications:', classifications)
 
-  this.updateConversationState({
-    currentExpectations: currentExpectations,
-    currentExpectationsStreamStack: this.getStreamStack(),
-  })
+  this.updateConversationState(['currentExpectations'], currentExpectations)
+  this.updateConversationState(['currentExpectationsStreamStack'], this.getStreamStack())
 }
 
 /**

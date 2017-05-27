@@ -1,3 +1,8 @@
+# 0.0.13 / 2017-05-27
+
+* Fix an issue where `expect` would not clear previous expectations
+  * Update `expect` to use new `updateConversationState` calling conventions
+
 # 0.0.12 / 2017-04-26
 
 * Update README to include new platform features
