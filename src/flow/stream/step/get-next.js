@@ -24,10 +24,12 @@ module.exports = function getNextStep(step, streams, previousState) {
       })
     } else {
       let streamStack = previousState.get('streamStack')
-      streamStack = streamStack.push(Map({
-        streamName: previousState.get('streamName'),
-        stepIndex: previousState.get('stepIndex') + 1,
-      }))
+      streamStack = streamStack.push(
+        Map({
+          streamName: previousState.get('streamName'),
+          stepIndex: previousState.get('stepIndex') + 1,
+        })
+      )
       nextState = previousState.merge({
         streamName: next,
         stepIndex: 0,
@@ -43,7 +45,9 @@ module.exports = function getNextStep(step, streams, previousState) {
   }
 
   // Check if we have exceeded the length of the steps array
-  if (nextState.get('stepIndex') >= streams[nextState.get('streamName')].length) {
+  if (
+    nextState.get('stepIndex') >= streams[nextState.get('streamName')].length
+  ) {
     let streamStack = previousState.get('streamStack')
     if (streamStack.count() > 0) {
       const previousStreamState = streamStack.last()
@@ -54,10 +58,12 @@ module.exports = function getNextStep(step, streams, previousState) {
         streamStack: streamStack,
       })
     } else {
-      streamStack = streamStack.push(Map({
-        streamName: previousState.get('streamName'),
-        stepIndex: previousState.get('stepIndex') + 1,
-      }))
+      streamStack = streamStack.push(
+        Map({
+          streamName: previousState.get('streamName'),
+          stepIndex: previousState.get('stepIndex') + 1,
+        })
+      )
       nextState = previousState.merge({
         streamName: 'end', // TODO: Make this a constant
         stepIndex: 0,
@@ -72,20 +78,21 @@ module.exports = function getNextStep(step, streams, previousState) {
 
     if (isStream(streams, nextStepOrStreamName)) {
       let streamStack = previousState.get('streamStack')
-      streamStack = streamStack.push(Map({
-        streamName: previousState.get('streamName'),
-        stepIndex: previousState.get('stepIndex') + 1,
-      }))
+      streamStack = streamStack.push(
+        Map({
+          streamName: previousState.get('streamName'),
+          stepIndex: previousState.get('stepIndex') + 1,
+        })
+      )
       nextState = previousState.merge({
         streamName: nextStepOrStreamName,
         stepIndex: 0,
         streamStack: streamStack,
       })
-    } else if (
-      !nextStepOrStreamName ||
-      isString(nextStepOrStreamName)
-    ) {
-      throw new Error(JSON.stringify(nextStepOrStreamName) + ' is not a valid stream')
+    } else if (!nextStepOrStreamName || isString(nextStepOrStreamName)) {
+      throw new Error(
+        JSON.stringify(nextStepOrStreamName) + ' is not a valid stream'
+      )
     }
   }
 

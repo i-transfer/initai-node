@@ -1,14 +1,26 @@
 {
   "name": "initai-node",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Manage conversation and event invocations and construct replies.",
   "main": "src/index.js",
   "scripts": {
     "lint": "eslint . --ignore-pattern 'test' --ignore-pattern '/node_modules' --ignore-pattern 'docs' --fix",
-    "test": "npm run lint && NODE_ENV=test mocha ./test --recursive --full-trace --check-leaks",
+    "lint:precommit": "eslint --ignore-pattern 'test' --ignore-pattern '/node_modules' --ignore-pattern 'docs' --fix",
+    "test": "NODE_ENV=test mocha ./test --recursive --full-trace --check-leaks",
     "test:watch": "npm t -- --watch",
     "generate-docs": "jsdoc --configure .jsdoc.json --verbose",
-    "jsdoc": "rm -rf docs; npm run generate-docs; cd docs && python -m SimpleHTTPServer 3044"
+    "jsdoc": "rm -rf docs; npm run generate-docs; cd docs && python -m SimpleHTTPServer 3044",
+    "fmt": "prettier --single-quote --trailing-comma es5 --no-semi --write \"src/**/*.js\"",
+    "fmt:precommit": "prettier --single-quote --trailing-comma es5 --no-semi --write",
+    "precommit": "lint-staged",
+    "prepush": "npm test"
+  },
+  "lint-staged": {
+    "src/**/*.js": [
+      "fmt:precommit",
+      "lint:precommit",
+      "git add"
+    ]
   },
   "keywords": [],
   "author": "Init.ai Developers <shared@init.ai>",
@@ -20,11 +32,17 @@
   "devDependencies": {
     "babel-eslint": "6.1.2",
     "chai": "3.5.0",
+    "chai-as-promised": "^7.0.0",
     "dirty-chai": "1.2.2",
-    "eslint": "3.2.2",
+    "eslint": "3.19.0",
+    "eslint-config-prettier": "^2.1.1",
+    "husky": "0.13.4",
     "jsdoc": "3.4.0",
+    "lint-staged": "3.6.1",
     "minami": "1.1.1",
     "mocha": "3.0.2",
+    "prettier": "^1.4.4",
+    "proxyquire": "^1.8.0",
     "sinon": "1.17.5",
     "sinon-chai": "2.8.0"
   },
@@ -32,6 +50,8 @@
     "immutable": "3.8.1",
     "jiff": "0.7.3",
     "lodash": "4.14.2",
-    "tracer": "0.8.3"
+    "node-fetch": "1.7.1",
+    "tracer": "0.8.3",
+    "uuid": "3.1.0"
   }
 }

@@ -131,3 +131,32 @@ client.runFlow(flowDefinition)
  * @property {boolean} [canonicalized=false] Currently unused
  * @property {any} [canonicalized=null] Currently unused
  */
+
+/**
+ * @typedef InvocationResultSuccess
+ * @property {string} body The body of the result. This will be 'OK'
+ * @property {null} error A null error
+ */
+
+/**
+ * @typedef InvocationResultError
+ * @property {string} message A detailed description of the error that occurred.
+ * @property {string} type The type of error that occurred.
+ */
+
+/**
+ * @typedef LogicResultPayload
+ * @property {string} execution_id The unique identifier for the current logic run
+ * @property {object} conversation_state The current conversation state as an arbitrary Object
+ * @property {object} conversation_state_patch The JSON-patch representation of conversation_state
+ * @property {object} user_metadata_updates An arbitrary Object containing user metadata changes –– keyed on user id
+ * @property {object} user_state_patch The JSON-patch representation of user changes
+ * @property {array<string>} reset_users An array of user ids marked for reset in the database
+ * @property {array<{}>} messages A composition of outbound message replies
+ */
+
+/**
+ * @typedef LogicResult
+ * @property {string} version The current version of the library
+ * @property {LogicResultPayload} payload
+ */

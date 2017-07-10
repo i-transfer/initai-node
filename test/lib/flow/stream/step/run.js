@@ -49,11 +49,13 @@ describe('runStepAndGetNewState', () => {
       fail: sandbox.stub()
     }
 
+    sandbox.stub(initClient.InitClient.prototype, 'logWarning')
     fakeClient = initClient.create(fakeMessageContext, fakeLambdaContext)
 
     // Swallow logs during tests
     sandbox.stub(fakeClient, 'log')
     sandbox.stub(logger, 'log')
+
   })
 
   it('follows the result of sync prompt', () => {

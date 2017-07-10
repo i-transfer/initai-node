@@ -1,5 +1,8 @@
 'use strict'
 
+const uuid = require('uuid')
+const fetch = require('node-fetch')
+const proxyquire = require('proxyquire').noPreserveCache()
 const initClient = require('../../../src/index')
 const Immutable = require('immutable')
 const constants = require('../../../src/util/constants')
@@ -11,11 +14,13 @@ const messageEventContext = require('../../helpers/message-event-context')
 const flowRunner = require('../../../src/flow/runner')
 const logger = require('../../../src/logger')
 const VERSION = process.env.VERSION
+const nodeFetchMock = require('../../helpers/nodeFetchMock')
 
 const InitClient = initClient.InitClient
 
 describe('InitClient', () => {
   let originalConstants, fakeMessageContext, fakeMessageWithEventContext, fakeLambdaContext
+  const fakeCorrelationId = 'fake_correlation_id'
 
   beforeEach(() => {
     fakeMessageContext = Immutable.fromJS(messageContext).toJS()
@@ -24,10 +29,14 @@ describe('InitClient', () => {
     originalConstants = Immutable.fromJS(constants).toJS()
     fakeLambdaContext = {
       succeed: sandbox.stub(),
-      fail: sandbox.stub()
     }
 
     sandbox.stub(logger, 'log')
+    sandbox.stub(uuid, 'v4').returns(fakeCorrelationId)
+
+
+    // Stubbed to prevent extraneous warning logs in all constructors
+    sandbox.stub(InitClient.prototype, 'logWarning')
   })
 
   afterEach(() => {
@@ -58,6 +67,14 @@ describe('InitClient', () => {
       })
     })
 
+    describe('_suggestionsQueue', () => {
+      it('creates empty suggested messages queue', () => {
+        const client = new InitClient(fakeMessageContext)
+
+        expect(client._suggestionsQueue).to.deep.equal([])
+      })
+    })
+
     describe('_messageContext', () => {
       it('throws an error if message context is not provided', () => {
         function run() {
@@ -80,6 +97,50 @@ describe('InitClient', () => {
         expect(Immutable.Map.isMap(client._messageContext)).to.equal(true)
         expect(client._messageContext.toJS()).not.to.have.any.keys('execution_data')
         expect(client._messageContext.toJS()).to.deep.equal(strippedPayload)
+      })
+    })
+
+    describe('lambdaContext', () => {
+      it('assigns _lambdaContext', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        expect(client._lambdaContext).to.equal(fakeLambdaContext)
+      })
+
+      it('defaults to null', () => {
+        [null, undefined].forEach((typeVal) => {
+          const client = new InitClient(fakeMessageContext, typeVal)
+
+          expect(client._lambdaContext).to.equal(null)
+        })
+      })
+
+      it('throws error if invalid lambdaContext type is provided', () => {
+        [
+          'foo',
+          true,
+          22,
+          ['x']
+        ].forEach((typeVal) => {
+          function run() {
+            return new InitClient(fakeMessageContext, typeVal)
+          }
+
+          expect(run).to.throw('A valid lambda context must be provided')
+        })
+      })
+
+      it('throws error if invalid lambdaContext shape is provided', () => {
+        [
+          {},
+          {foo: 'bar'},
+        ].forEach((shape) => {
+          function run() {
+            return new InitClient(fakeMessageContext, shape)
+          }
+
+          expect(run).to.throw('A valid lambda context must be provided')
+        })
       })
     })
   })
@@ -811,7 +872,171 @@ describe('InitClient', () => {
         )
       })
     })
+  })
 
+  describe('addSuggestion', () => {
+    beforeEach(() => {
+      sandbox.stub(InitClient.prototype, 'logError')
+    })
+
+    describe('validation', () => {
+      it('errors if no suggestion is provided', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        function run() {
+          client.addSuggestion()
+        }
+
+        expect(run).to.throw('A valid suggested message object is required')
+        expect(client.logError).to.have.been.calledWith(sinon.match.string)
+      })
+
+      it('errors if both `intent` and `text` are provided', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        function run() {
+          client.addSuggestion({intent: 'foo', text: 'bar'})
+        }
+
+        expect(run).to.throw('A valid suggested message object is required')
+        expect(client.logError).to.have.been.calledWithMatch('Error creating Suggestion – `text` may not be used with `intent`')
+      })
+
+      it('throws an error if metadata is not an Object', () => {
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+        const metadataTypes = [
+          'foo',
+          true,
+          22,
+          ['a', 'b'],
+          () => {},
+        ].forEach(type => {
+          const run = () => client.addSuggestion({text: 'foo', metadata: type})
+
+          expect(run).to.throw('A valid suggested message object is required')
+          expect(client.logError).to.have.been.calledWithMatch('Error creating Suggestion – `metadata` must be an Object')
+        })
+      })
+
+      it('throws an error if `text` is not a valid string', () => {
+        const client = new InitClient(fakeMessageContext)
+        const run = (val) => () => client.addSuggestion({text: val})
+        const errorReason = 'Error creating Suggestion – `text` must be a valid string'
+        const errorMessage = 'A valid suggested message object is required'
+
+        expect(run('')).to.throw(errorMessage)
+        expect(run({})).to.throw(errorMessage)
+        expect(run([])).to.throw(errorMessage)
+        expect(run(22)).to.throw(errorMessage)
+        expect(run(false)).to.throw(errorMessage)
+        expect(client.logError).to.always.have.been.calledWithMatch(errorReason)
+      })
+    })
+
+    describe('`raw` suggested message', () => {
+      it('appends raw message(s) to queue', () => {
+        const client = new InitClient(fakeMessageContext)
+
+        client.addSuggestion({text: 'Message 1'})
+
+        expect(client._suggestionsQueue).to.deep.equal([{
+          content_type: 'text',
+          correlation_id: fakeCorrelationId,
+          suggestion_type: 'message',
+          text: 'Message 1',
+        }])
+
+        client.addSuggestion({text: 'Message 2'})
+
+        expect(client._suggestionsQueue).to.deep.equal([
+          {
+            content_type: 'text',
+            correlation_id: fakeCorrelationId,
+            suggestion_type: 'message',
+            text: 'Message 1',
+          },
+          {
+            content_type: 'text',
+            correlation_id: fakeCorrelationId,
+            suggestion_type: 'message',
+            text: 'Message 2',
+          },
+        ])
+      })
+
+      it('sends provided metadata', () => {
+        const client = new InitClient(fakeMessageContext)
+
+        const fakeMetadata = {foo: 'bar'}
+        client.addSuggestion({
+          text: 'Message 1',
+          metadata: fakeMetadata
+        })
+
+        expect(client._suggestionsQueue).to.deep.equal([{
+          content_type: 'text',
+          correlation_id: fakeCorrelationId,
+          metadata: fakeMetadata,
+          suggestion_type: 'message',
+          text: 'Message 1',
+        }])
+      })
+    })
+
+    describe('`intent` responses', () => {
+      it('appends intent hydration message(s) to queue', () => {
+        const client = new InitClient(fakeMessageContext)
+
+        client.addSuggestion({
+          intent: 'some_intent',
+          data: {foo: 'bar'},
+        })
+
+        expect(client._suggestionsQueue).to.deep.equal([{
+          content_type: 'text',
+          correlation_id: fakeCorrelationId,
+          data: {foo: 'bar'},
+          intent: 'some_intent',
+          suggestion_type: 'message',
+        }])
+      })
+
+      it('sends empty data object', () => {
+        const client = new InitClient(fakeMessageContext)
+
+        client.addSuggestion({
+          intent: 'some_intent',
+        })
+
+        expect(client._suggestionsQueue).to.deep.equal([{
+          content_type: 'text',
+          correlation_id: fakeCorrelationId,
+          data: {},
+          intent: 'some_intent',
+          suggestion_type: 'message',
+        }])
+      })
+
+      it('sends provided metadata', () => {
+        const client = new InitClient(fakeMessageContext)
+
+        const fakeMetadata = {foo: 'bar'}
+        client.addSuggestion({
+          intent: 'some_intent',
+          metadata: fakeMetadata
+        })
+
+        expect(client._suggestionsQueue).to.deep.equal([{
+          content_type: 'text',
+          correlation_id: fakeCorrelationId,
+          data: {},
+          intent: 'some_intent',
+          metadata: fakeMetadata,
+          suggestion_type: 'message',
+        }])
+      })
+    })
   })
 
   describe('conversation management', () => {
@@ -1046,7 +1271,6 @@ describe('InitClient', () => {
     describe('updateUser', () => {
       beforeEach(() => {
         sandbox.stub(InitClient.prototype, 'logError')
-        sandbox.stub(InitClient.prototype, 'logWarning')
       })
 
       it('throws if a valid user id is not provided', () => {
@@ -1552,10 +1776,6 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
     })
 
     describe('getCurrentApplicationEnvironment', () => {
-      beforeEach(() => {
-        sandbox.stub(InitClient.prototype, 'logWarning')
-      })
-
       it('returns a collection of environment vars', () => {
         const client = new InitClient(fakeMessageContext, fakeLambdaContext)
 
@@ -1648,10 +1868,13 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
             INVALID_RESPONSE_IMAGE: 'A valid response image URL must be provided',
             INVALID_SCRIPTS_COLLECTION: 'A valid scripts collection is required',
             INVALID_USER_ID_PROVIDED: 'A valid user id must be provided',
+            INVALID_SUGGESTED_MESSAGE: 'A valid suggested message object is required',
             INVALID_TEMPLATE_STRING: 'A valid template string must be provided',
             INVALID_TEMPLATE_DATA: 'Valid data to hydrate the template must be provided',
             INVALID_RESPONSE_NAME: 'A valid response name must be provided',
             INVALID_SOURCE_CODE: 'A valid sourceCode string must be provided',
+            SEND_RESULTS_NETWORK_FAILURE: 'There was an error sending your results. Please try again.',
+            SEND_RESULTS_VALIDATION_FAILURE: 'There was an error validating your data. Please try again.'
           },
           IdTypes: {
             APP_USER_ID: 'app_user_id',
@@ -1699,12 +1922,15 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
           INVALID_MESSAGE_CONTEXT: 'A valid message context must be provided',
           INVALID_RESPONSE_MESSAGE: 'A valid response message must be provided',
           INVALID_RESPONSE_IMAGE: 'A valid response image URL must be provided',
+          INVALID_SUGGESTED_MESSAGE: 'A valid suggested message object is required',
           INVALID_SCRIPTS_COLLECTION: 'A valid scripts collection is required',
           INVALID_USER_ID_PROVIDED: 'A valid user id must be provided',
           INVALID_TEMPLATE_STRING: 'A valid template string must be provided',
           INVALID_TEMPLATE_DATA: 'Valid data to hydrate the template must be provided',
           INVALID_RESPONSE_NAME: 'A valid response name must be provided',
           INVALID_SOURCE_CODE: 'A valid sourceCode string must be provided',
+          SEND_RESULTS_NETWORK_FAILURE: 'There was an error sending your results. Please try again.',
+          SEND_RESULTS_VALIDATION_FAILURE: 'There was an error validating your data. Please try again.'
         })
       })
 
@@ -1718,11 +1944,14 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
             INVALID_RESPONSE_MESSAGE: 'A valid response message must be provided',
             INVALID_RESPONSE_IMAGE: 'A valid response image URL must be provided',
             INVALID_SCRIPTS_COLLECTION: 'A valid scripts collection is required',
+            INVALID_SUGGESTED_MESSAGE: 'A valid suggested message object is required',
             INVALID_USER_ID_PROVIDED: 'A valid user id must be provided',
             INVALID_TEMPLATE_STRING: 'A valid template string must be provided',
             INVALID_TEMPLATE_DATA: 'Valid data to hydrate the template must be provided',
             INVALID_RESPONSE_NAME: 'A valid response name must be provided',
             INVALID_SOURCE_CODE: 'A valid sourceCode string must be provided',
+            SEND_RESULTS_NETWORK_FAILURE: 'There was an error sending your results. Please try again.',
+            SEND_RESULTS_VALIDATION_FAILURE: 'There was an error validating your data. Please try again.'
           },
           IdTypes: {
             APP_USER_ID: 'app_user_id',
@@ -1971,7 +2200,6 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
   describe('done', () => {
     beforeEach(() => {
       sandbox.stub(InitClient.prototype, 'logError')
-      sandbox.stub(InitClient.prototype, 'logWarning')
     })
 
     it('signals termination to the λ function', () => {
@@ -1988,73 +2216,44 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
         payload: {
           execution_id: 'foobar',
           conversation_state: sinon.match.object,
-          conversation_state_patch: sinon.match.array,
           user_metadata_updates: sinon.match.object,
           users_patch: sinon.match.array,
           reset_users: sinon.match.array,
+          suggestions: sinon.match.array,
           messages: [
             {parts: sinon.match.array}
           ]
         }
       })
     })
+  })
 
-    it('sends the conversation diff', () => {
-      let client
+  describe('getLogicResult', () => {
+    it('returns the version', () => {
+      const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+      const logicResult = client.getLogicResult()
 
-      sandbox.stub(jiff, 'diff')
-
-      fakeMessageContext.payload.current_conversation.state = {foo: 'noo'}
-
-      client = new InitClient(fakeMessageContext, fakeLambdaContext)
-
-      client.updateConversationState('bar', 'baz')
-
-      client.done()
-
-      expect(jiff.diff.args[0]).to.deep.equal([
-        {foo: 'noo'},
-        {foo: 'noo', bar: 'baz'}
-      ])
+      expect(logicResult.version).to.equal(
+        require('../../../package').version
+      )
     })
 
-    it('sends the users patch', () => {
-      let client
+    describe('payload', () => {
+      it('sends the conversation state', () => {
+        fakeMessageContext.payload.current_conversation.state = {foo: 'noo'}
 
-      sandbox.stub(jiff, 'diff')
+        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        client.updateConversationState('bar', 'baz')
 
-      fakeMessageContext.payload.users = {
-        '123': {
-          id: '123',
-          first_name: 'dave'
-        }
-      }
+        const logicResult = client.getLogicResult()
 
-      client = new InitClient(fakeMessageContext, fakeLambdaContext)
+        expect(logicResult.payload.conversation_state).to.deep.equal({
+          foo: 'noo',
+          bar: 'baz'
+        })
+      })
 
-      client.updateUser('123', {last_name: 'grohl'})
-
-      client.done()
-
-      expect(jiff.diff.args[1]).to.deep.equal([
-        {
-          '123': {
-            first_name: 'dave',
-            id: '123'
-          }
-        },
-        {
-          '123': {
-            first_name: 'dave',
-            last_name: 'grohl',
-            id: '123'
-          }
-        }
-      ])
-    })
-
-    describe('user_metadata_updates', () => {
-      it('writes updates', () => {
+      it('sends the users patch', () => {
         fakeMessageContext.payload.users = {
           '123': {
             id: '123',
@@ -2064,63 +2263,224 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`)
 
         const client = new InitClient(fakeMessageContext, fakeLambdaContext)
 
-        client.updateUser('123', 'metadata', {city: 'Philadelphia'})
+        client.updateUser('123', 'last_name', 'grohl')
 
-        client.done()
+        const logicResult = client.getLogicResult()
 
-        expect(fakeLambdaContext.succeed.args[0][0].payload.user_metadata_updates).to.deep.equal({
-          123: {city: 'Philadelphia'}
+        expect(logicResult.payload.users_patch).to.deep.equal([
+          {
+            op: 'add',
+            path: '/123/last_name',
+            value: 'grohl',
+          }
+        ])
+      })
+
+      describe('user_metadata_updates', () => {
+        it('writes updates', () => {
+          fakeMessageContext.payload.users = {
+            '123': {
+              id: '123',
+              first_name: 'dave'
+            }
+          }
+
+          const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+          client.updateUser('123', 'metadata', {city: 'Philadelphia'})
+
+          const logicResult = client.getLogicResult()
+
+          expect(logicResult.payload.user_metadata_updates).to.deep.equal({
+            123: {city: 'Philadelphia'}
+          })
+        })
+
+        it('writes empty object if no changes are applied to metadata', () => {
+          fakeMessageContext.payload.users = {
+            '123': {
+              id: '123',
+              first_name: 'dave',
+            },
+            '456': {
+              id: '456',
+              first_name: 'tony',
+            }
+          }
+
+          const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+          client.updateUser('456', 'first_name', 'frank')
+          const logicResult = client.getLogicResult()
+
+          expect(logicResult.payload.user_metadata_updates).to.deep.equal({})
         })
       })
 
-      it('writes empty object if no changes are applied to metadata', () => {
-        fakeMessageContext.payload.users = {
-          '123': {
-            id: '123',
-            first_name: 'dave',
-          },
-          '456': {
-            id: '456',
-            first_name: 'tony',
+      describe('reset_users', () => {
+        it('sends an empty array', () => {
+          const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+          const logicResult = client.getLogicResult()
+
+          expect(logicResult.payload.reset_users).to.deep.equal([])
+        })
+
+        it('sends a popuplated array', () => {
+          let client
+
+          fakeMessageContext.payload.users = {
+            'abc': {id: 'abc'},
+            'def': {id: 'def'},
+            'ghi': {id: 'ghi'}
           }
-        }
 
-        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
-        client.updateUser('456', 'first_name', 'frank')
-        client.done()
+          client = new InitClient(fakeMessageContext, fakeLambdaContext)
+          client.resetUser()
 
-        expect(fakeLambdaContext.succeed.args[0][0].payload.user_metadata_updates).to.deep.equal({})
+          const logicResult = client.getLogicResult()
+
+          expect(logicResult.payload.reset_users).to.deep.equal([
+            'abc',
+            'def',
+            'ghi'
+          ])
+        })
+      })
+
+      describe('suggestions', () => {
+        it('returns original empty collection', () => {
+          const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+          const logicResult = client.getLogicResult()
+
+          expect(logicResult.payload.suggestions).to.deep.equal([])
+        })
+
+        it('returns queued list of suggested messages', () => {
+          const client = new InitClient(fakeMessageContext, fakeLambdaContext)
+
+          client.addSuggestion({text: 'message1'})
+          client.addSuggestion({text: 'message2'})
+          client.addSuggestion({
+            intent: 'some_intent',
+            data: {foo: 'bar'},
+            metadata: {red: 'rover'},
+          })
+
+          const logicResult = client.getLogicResult()
+
+          expect(logicResult.payload.suggestions).to.deep.equal([
+            {
+              content_type: 'text',
+              correlation_id: fakeCorrelationId,
+              suggestion_type: 'message',
+              text: 'message1',
+            },
+            {
+              content_type: 'text',
+              correlation_id: fakeCorrelationId,
+              suggestion_type: 'message',
+              text: 'message2',
+            },
+            {
+              content_type: 'text',
+              correlation_id: fakeCorrelationId,
+              data: {foo: 'bar'},
+              intent: 'some_intent',
+              metadata: {red: 'rover'},
+              suggestion_type: 'message',
+            },
+          ])
+        })
       })
     })
+  })
 
-    describe('reset_users', () => {
-      it('sends an empty array', () => {
-        const client = new InitClient(fakeMessageContext, fakeLambdaContext)
-
-        client.done()
-
-        expect(fakeLambdaContext.succeed.args[0][0].payload.reset_users).to.deep.equal([])
+  describe('sendResult', () => {
+    it('resolves a Promise', () => {
+      const invocationResultSuccess = {
+        body: 'OK',
+        error: null,
+      }
+      const initClientModule = proxyquire('../../../src/index', {
+        'node-fetch': (url, options) => nodeFetchMock.mockSuccess()
       })
 
-      it('sends a popuplated array', () => {
-        let client
+      const client = new initClientModule.InitClient(fakeMessageContext)
 
-        fakeMessageContext.payload.users = {
-          'abc': {id: 'abc'},
-          'def': {id: 'def'},
-          'ghi': {id: 'ghi'}
-        }
+      return expect(client.sendResult()).to.eventually.deep.equal(invocationResultSuccess)
+    })
 
-        client = new InitClient(fakeMessageContext, fakeLambdaContext)
-        client.resetUser()
+    describe('rejections', () => {
+      describe('VALIDATION_ERROR', () => {
+        it('rejects on failed suggestion validation', () => {
+          const invocationResultError = {
+            status: 400,
+            message: 'There was an error validating your data. Please try again.',
+            type: 'VALIDATION_ERROR',
+          }
+          const fakeErrorBody = {
+            body: {
+              accepted: false,
+              errors: [
+                { message: 'Could not find matching template: provide_gametime',
+                  correlation_id: fakeCorrelationId,
+                  object_type: 'suggestion',
+                }
+              ]
+            },
+          }
+          const initClientModule = proxyquire('../../../src/index', {
+            'node-fetch': (url, options) => nodeFetchMock.mockFailure(400, 'Bad Request', fakeErrorBody)
+          })
 
-        client.done()
+          const client = new initClientModule.InitClient(fakeMessageContext)
 
-        expect(fakeLambdaContext.succeed.args[0][0].payload.reset_users).to.deep.equal([
-          'abc',
-          'def',
-          'ghi'
-        ])
+          sandbox.stub(client, 'logError')
+
+          client.addSuggestion({
+            intent: 'provide_gametime',
+            data: {team: 'cubs'},
+          })
+
+          return client.sendResult().catch(err => {
+            expect(err).to.deep.equal(invocationResultError)
+            expect(client.logError).to.have.been.calledWith(sinon.match.string)
+          })
+        })
+      })
+
+      describe('API_ERROR', () => {
+        it('rejects on failed authorization', () => {
+          const invocationResultError = {
+            message: 'There was an error sending your results. Please try again.',
+            status: 404,
+            type: 'API_ERROR',
+          }
+          const fakeErrorBody = { message: 'Not found or not authorized', code: 404 }
+          const initClientModule = proxyquire('../../../src/index', {
+            'node-fetch': (url, options) => nodeFetchMock.mockFailure(404, undefined, fakeErrorBody)
+          })
+
+          const client = new initClientModule.InitClient(fakeMessageContext)
+
+          return client.sendResult().catch(err => expect(err).to.deep.equal(invocationResultError))
+        })
+
+        it('rejects on server error', () => {
+          const invocationResultError = {
+            type: 'API_ERROR',
+            message: 'There was an error sending your results. Please try again.',
+            status: 500,
+          }
+          const fakeErrorBody = { message: 'Unexpected error', code: 500 }
+          const initClientModule = proxyquire('../../../src/index', {
+            'node-fetch': (url, options) => nodeFetchMock.mockFailure(500, 'Unexpected Server Error', fakeErrorBody)
+          })
+
+          const client = new initClientModule.InitClient(fakeMessageContext)
+
+          return client.sendResult().catch(err => expect(err).to.deep.equal(invocationResultError))
+        })
       })
     })
   })

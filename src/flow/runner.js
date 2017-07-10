@@ -27,21 +27,28 @@ function Flow(definition, client) {
   this.streams = definition.streams
   this.classifications = definition.classifications || {}
   this.client = client
-  this.currentMessageClassificationDisplay = getClassificationDisplay(messagePartClassification)
-  this.currentMessageClassificationBaseType = getClassificationBaseType(messagePartClassification)
-  this.currentMessageClassificationWithoutStyle = getClassificationWithoutStyle(messagePartClassification)
+  this.currentMessageClassificationDisplay = getClassificationDisplay(
+    messagePartClassification
+  )
+  this.currentMessageClassificationBaseType = getClassificationBaseType(
+    messagePartClassification
+  )
+  this.currentMessageClassificationWithoutStyle = getClassificationWithoutStyle(
+    messagePartClassification
+  )
   this.state = Map(getInitialState(this.streams))
-  this.runStep = runStep// stepRunner(client, this.streams)
+  this.runStep = runStep // stepRunner(client, this.streams)
   this.extractor = extractInfoFromStreamSteps(this.streams)
   this.autoResponses = definition.autoResponses || {}
   this.eventHandlers = definition.eventHandlers || {}
 
-  const senderRolesToProcess = (
-    definition.senderRolesToProcess || [this.client.constants.ParticipantRoles.END_USER]
-  ).reduce((roles, role) => {
-    roles[role] = true
-    return roles
-  }, {})
+  const senderRolesToProcess = (definition.senderRolesToProcess || [
+    this.client.constants.ParticipantRoles.END_USER,
+  ])
+    .reduce((roles, role) => {
+      roles[role] = true
+      return roles
+    }, {})
 
   if (this.isValidSenderRole(this.client.getMessage(), senderRolesToProcess)) {
     this.initialize()
@@ -50,12 +57,12 @@ function Flow(definition, client) {
   }
 }
 
-Flow.prototype.isValidSenderRole = function isValidSenderRole(currentMessage, rolesToProcess) {
+Flow.prototype.isValidSenderRole = function isValidSenderRole(
+  currentMessage,
+  rolesToProcess
+) {
   if (currentMessage.sender_role) {
-    return Boolean(
-      rolesToProcess &&
-      rolesToProcess[currentMessage.sender_role]
-    )
+    return Boolean(rolesToProcess && rolesToProcess[currentMessage.sender_role])
   } else {
     return true
   }
@@ -80,9 +87,11 @@ Flow.prototype.initialize = function initialize() {
       this.runLastStep()
 
       break
-    case this.client.constants.MessageTypes.POSTBACK:
+    /* eslint-disable no-fallthrough */
+    case this.client.constants.MessageTypes.POSTBACK: {
       logger.log('Processing postback message part as text')
-      // eslint-disable-line no-fallthrough
+    }
+    /* eslint-enable no-fallthrough */
     case this.client.constants.MessageTypes.TEXT:
       logger.log('Processing text message part')
 
@@ -93,7 +102,10 @@ Flow.prototype.initialize = function initialize() {
 
       break
     default:
-      logger.log('Unsupported message part content type:', currentMessagePartContentType)
+      logger.log(
+        'Unsupported message part content type:',
+        currentMessagePartContentType
+      )
   }
 }
 
@@ -112,7 +124,9 @@ Flow.prototype.runStateMutations = function runStateMutations() {
     if (
       this.currentlyActiveStep &&
       isFunction(this.currentlyActiveStep.expects) &&
-      this.currentlyActiveStep.expects().indexOf(this.currentMessageClassificationDisplay) !== -1
+      this.currentlyActiveStep
+        .expects()
+        .indexOf(this.currentMessageClassificationDisplay) !== -1
     ) {
       logger.log('Prompt after expectation assignment override')
 
@@ -134,11 +148,10 @@ Flow.prototype.runStateMutations = function runStateMutations() {
 
   if (
     messagePartContent &&
-    this.client.getMessagePart().content_type === this.client.constants.MessageTypes.TEXT &&
-    (
-      messagePartContent.trim() === '!RESET' ||
-      messagePartContent.trim() === '/reset'
-    )
+    this.client.getMessagePart().content_type ===
+      this.client.constants.MessageTypes.TEXT &&
+    (messagePartContent.trim() === '!RESET' ||
+      messagePartContent.trim() === '/reset')
   ) {
     logger.log('Resetting user')
     this.client.resetUser()
@@ -148,26 +161,35 @@ Flow.prototype.runStateMutations = function runStateMutations() {
     return
   }
 
-  const classificationMatch = (
+  const classificationMatch =
     this.classifications[this.currentMessageClassificationDisplay] ||
     this.classifications[this.getClassificationWithoutStyle] ||
     this.classifications[this.currentMessageClassificationBaseType]
-  )
   logger.log('Matching classification mapping:', classificationMatch)
 
-  if (this.client.getMessagePart().content_type === this.client.constants.MessageTypes.POSTBACK) {
+  if (
+    this.client.getMessagePart().content_type ===
+    this.client.constants.MessageTypes.POSTBACK
+  ) {
     logger.log('Processing postback:', this.client.getMessagePart().content)
   }
 
   // This is where the default classification mappings are overridden.
   // If the previous invocation had set expected classifications, route based on those before attempting the default routing procedures
   if (
-    this.currentExpectations.classifications && this.findExpectationMatchingCurrentPart()
+    this.currentExpectations.classifications &&
+    this.findExpectationMatchingCurrentPart()
   ) {
     this.state = this._getUpdatedStateFromExpectedClassifications()
     this.client.updateConversationState('currentExpectations', null)
-    this.client.updateConversationState('lastExpectations', this.currentExpectations)
-  } else if (this.autoRespond(this.client.getMessagePart().predicted_next_message)) { // autoResponder will return true if processing should stop
+    this.client.updateConversationState(
+      'lastExpectations',
+      this.currentExpectations
+    )
+  } else if (
+    this.autoRespond(this.client.getMessagePart().predicted_next_message)
+  ) {
+    // autoResponder will return true if processing should stop
     // autoresponder sent a message or otherwise stopped processing
     logger.log('autoResponder stopped processing')
 
@@ -175,19 +197,21 @@ Flow.prototype.runStateMutations = function runStateMutations() {
     // this.client.done()
   } else if (
     this.client.getMessagePart() &&
-    this.client.getMessagePart().content_type === this.client.constants.MessageTypes.POSTBACK &&
+    this.client.getMessagePart().content_type ===
+      this.client.constants.MessageTypes.POSTBACK &&
     this.streams[this.client.getMessagePart().content.stream]
   ) {
-    logger.log('Got postback that directs to stream:', this.client.getMessagePart().content.stream)
+    logger.log(
+      'Got postback that directs to stream:',
+      this.client.getMessagePart().content.stream
+    )
 
     this.state = this.state.merge({
       streamName: this.client.getMessagePart().content.stream,
       stepIndex: 0,
       isFirstRun: false,
     })
-  } else if (
-    this.findClassificationMatchingCurrentPart()
-  ) {
+  } else if (this.findClassificationMatchingCurrentPart()) {
     // Route via the default classification mappings provided in the developer's declaration
     this.state = this._getUpdatedStateFromClassificationMappings()
   } else if (!this.currentlyActiveStep && this.currentExpectations.stream) {
@@ -233,9 +257,15 @@ Flow.prototype.runStateMutations = function runStateMutations() {
 
 Flow.prototype.findExpectationMatchingCurrentPart = function findExpectationMatchingCurrentPart() {
   return (
-    this.currentExpectations.classifications[this.currentMessageClassificationDisplay] ||
-    this.currentExpectations.classifications[this.getClassificationWithoutStyle] ||
-    this.currentExpectations.classifications[this.currentMessageClassificationBaseType]
+    this.currentExpectations.classifications[
+      this.currentMessageClassificationDisplay
+    ] ||
+    this.currentExpectations.classifications[
+      this.getClassificationWithoutStyle
+    ] ||
+    this.currentExpectations.classifications[
+      this.currentMessageClassificationBaseType
+    ]
   )
 }
 
@@ -254,10 +284,7 @@ Flow.prototype.runLastStep = function runLastStep() {
 Flow.prototype.handleEvent = function handleEvent(eventMessagePart) {
   const eventType = eventMessagePart.content.event_type
   const handlersConfig = this.eventHandlers || {}
-  const handler = (
-    handlersConfig[eventType] ||
-    handlersConfig['*']
-  )
+  const handler = handlersConfig[eventType] || handlersConfig['*']
 
   if (handler) {
     logger.log('Found matching event handler:', handler)
@@ -291,7 +318,11 @@ Flow.prototype.autoRespond = function autoRespond(prediction) {
     logger.log('Another message from the user is expected')
     logger.log('continuationConfig:', continuationConfig)
 
-    if (continuationConfig && continuationConfig.minimumConfidence && continuationConfig.minimumConfidence > prediction.overall_confidence) {
+    if (
+      continuationConfig &&
+      continuationConfig.minimumConfidence &&
+      continuationConfig.minimumConfidence > prediction.overall_confidence
+    ) {
       logger.log('Not confident enough in continuation')
       return false
     } else if (continuationConfig && continuationConfig.ignore) {
@@ -300,14 +331,15 @@ Flow.prototype.autoRespond = function autoRespond(prediction) {
       return true
     }
 
-    logger.log('Another message from the user is expected, but processing will continue')
+    logger.log(
+      'Another message from the user is expected, but processing will continue'
+    )
   } else if (predictedDirection === 'output') {
     logger.log('An output was predicted')
 
-    const predictionConfig = (
+    const predictionConfig =
       this.autoResponses[predictedBaseType + '/' + predictedSubType] ||
       this.autoResponses[predictedBaseType]
-    )
 
     if (!predictionConfig) {
       logger.log('Auto response is not configured for the predicted response')
@@ -316,15 +348,24 @@ Flow.prototype.autoRespond = function autoRespond(prediction) {
       logger.log('predictionConfig exists:', predictionConfig)
     }
 
-    if (!prediction.predicted_response || !prediction.predicted_response.auto_fill_capable) {
+    if (
+      !prediction.predicted_response ||
+      !prediction.predicted_response.auto_fill_capable
+    ) {
       logger.log('Predicted response is not capable of being auto filled')
       return false
     }
 
-    let minimumConfidence = (predictionConfig && predictionConfig.minimumConfidence) || 0.5
+    let minimumConfidence =
+      (predictionConfig && predictionConfig.minimumConfidence) || 0.5
 
     if (minimumConfidence > prediction.overall_confidence) {
-      logger.log('Prediction response confidence of', prediction.overall_confidence, 'did not meet minimum threshold of', minimumConfidence)
+      logger.log(
+        'Prediction response confidence of',
+        prediction.overall_confidence,
+        'did not meet minimum threshold of',
+        minimumConfidence
+      )
       return false
     }
 
@@ -346,20 +387,24 @@ Flow.prototype.autoRespond = function autoRespond(prediction) {
 
 Flow.prototype._getCurrentExpectations = function _getCurrentExpectations() {
   let stream
-  let currentExpectations = this.client.getConversationState().currentExpectations
+  let currentExpectations = this.client.getConversationState()
+    .currentExpectations
 
   if (currentExpectations) {
     logger.log('Found expectations on conversation state:', currentExpectations)
     stream = Object.keys(currentExpectations)[0]
 
     if (stream) {
-      return currentExpectations[stream].reduce((accum, classification) => {
-        accum.classifications[classification] = stream
-        return accum
-      }, {
-        stream,
-        classifications: {},
-      })
+      return currentExpectations[stream].reduce(
+        (accum, classification) => {
+          accum.classifications[classification] = stream
+          return accum
+        },
+        {
+          stream,
+          classifications: {},
+        }
+      )
     }
   }
 
@@ -371,31 +416,27 @@ Flow.prototype._getCurrentExpectations = function _getCurrentExpectations() {
 }
 
 Flow.prototype._getCurrentExpectationsStreamStack = function _getCurrentExpectationsStreamStack() {
-  return this.client.getConversationState().currentExpectationsStreamStack || List()
+  return (
+    this.client.getConversationState().currentExpectationsStreamStack || List()
+  )
 }
 
 Flow.prototype._getUpdatedStateFromExpectedClassifications = function _getUpdatedStateFromExpectedClassifications() {
-  const matchedStreamName = (
-    this.findExpectationMatchingCurrentPart()
-  )
+  const matchedStreamName = this.findExpectationMatchingCurrentPart()
   const currentExpectationsStreamStack = this._getCurrentExpectationsStreamStack()
 
-  return (
-    matchedStreamName
-  ) ? (
-    this.state.merge({
-      streamName: matchedStreamName,
-      stepIndex: 0,
-      isFirstRun: false,
-      streamStack: currentExpectationsStreamStack,
-    })
-  ) : this.state
+  return matchedStreamName
+    ? this.state.merge({
+        streamName: matchedStreamName,
+        stepIndex: 0,
+        isFirstRun: false,
+        streamStack: currentExpectationsStreamStack,
+      })
+    : this.state
 }
 
 Flow.prototype._getUpdatedStateFromClassificationMappings = function _getUpdatedStateFromClassificationMappings() {
-  const matchedStreamName = (
-    this.findClassificationMatchingCurrentPart()
-  )
+  const matchedStreamName = this.findClassificationMatchingCurrentPart()
   return this.state.merge({
     streamName: matchedStreamName,
     stepIndex: 0,

@@ -1,24 +1,40 @@
+/* eslint-disable consistent-return */
 'use strict'
 
-const _ = require('lodash')
-const jiff = require('jiff')
 const Immutable = require('immutable')
+const _ = require('lodash')
+const fetch = require('node-fetch')
+const jiff = require('jiff')
+const uuid = require('uuid')
 
 const constants = require('./util/constants')
+const prettyPrintValidationErrors = require('./util/prettyPrintValidationErrors')
 const logger = require('./logger')
 const flowRunner = require('./flow/runner')
-const VERSION = process.env.VERSION
+const VERSION = process.env.VERSION || require('../package').version
+const createErrorWithDocsLink = require('./util/createErrorWithDocsLink')
 
 // `isObject` returns true for Array values, `isPlainObject` is more strict
 const isObject = _.isPlainObject
 const isString = _.isString
+const isEmpty = _.isEmpty
+
+const SEND_RESULT_UPGRADE_MESSAGE =
+  'As of version 0.0.14 it is recommended that you use `sendResult`.\n\nSee docs: https://docs.init.ai/docs/node-js-sdk-client-methods#section-sendresult'
 
 function _setupMessageContext(messageContext) {
-  const sender = messageContext.payload.users ? messageContext.payload.users[messageContext.payload.current_conversation.__private_temp_user_id] : null
+  const sender = messageContext.payload.users
+    ? messageContext.payload.users[
+        messageContext.payload.current_conversation.__private_temp_user_id
+      ]
+    : null
 
   return Immutable.fromJS(messageContext.payload)
     .deleteIn(['execution_data'])
-    .setIn(['current_conversation', 'messages', 0, 'parts', 0, 'sender'], sender)
+    .setIn(
+      ['current_conversation', 'messages', 0, 'parts', 0, 'sender'],
+      sender
+    )
 }
 
 /**
@@ -31,13 +47,18 @@ function InitClient(messageContext, lambdaContext) {
     throw new Error(constants.Errors.INVALID_MESSAGE_CONTEXT)
   }
 
-  if (!lambdaContext) {
-    throw new Error(constants.Errors.INVALID_LAMBDA_CONTEXT)
+  if (lambdaContext) {
+    if (isObject(lambdaContext) && lambdaContext.succeed) {
+      this.logWarning(SEND_RESULT_UPGRADE_MESSAGE)
+    } else {
+      throw new Error(constants.Errors.INVALID_LAMBDA_CONTEXT)
+    }
   }
 
   this._messageResponsePartsQueue = []
+  this._suggestionsQueue = []
   this._executionData = Immutable.fromJS(messageContext.payload.execution_data)
-  this._lambdaContext = lambdaContext
+  this._lambdaContext = lambdaContext || null
   this._messageContext = _setupMessageContext(messageContext)
   this._originalMessageContext = messageContext
   this._originalUsers = messageContext.payload.users
@@ -112,8 +133,14 @@ InitClient.prototype.getMessagePart = function getMessagePart() {
  * @returns {Message} message - {@link Message}
  */
 InitClient.prototype.getMessage = function getMessage() {
-  const messageToProcessIndex = this._messageContext.getIn(['current_conversation', 'conversation_message_index_to_process'])
-  const messages = this._messageContext.getIn(['current_conversation', 'messages'])
+  const messageToProcessIndex = this._messageContext.getIn([
+    'current_conversation',
+    'conversation_message_index_to_process',
+  ])
+  const messages = this._messageContext.getIn([
+    'current_conversation',
+    'messages',
+  ])
   const currentMessage = messages.get(messageToProcessIndex)
 
   return currentMessage.toJS()
@@ -143,19 +170,26 @@ InitClient.prototype.getMessageText = function getMessageText() {
 * @param {string} [role=generic] - The role to lookup
 * @returns {SlotValue|null} The slot value for this entity and role
 */
-InitClient.prototype.getFirstEntityWithRole = function getFirstEntityWithRole(messagePart, entity, role) {
+InitClient.prototype.getFirstEntityWithRole = function getFirstEntityWithRole(
+  messagePart,
+  entity,
+  role
+) {
   if (!messagePart || !isObject(messagePart)) {
-    this.logError('getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
+    this.logError(
+      'getFirstEntityWithRole: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole'
+    )
     return null
   }
 
   if (!entity) {
-    this.logError('getFirstEntityWithRole: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole')
+    this.logError(
+      'getFirstEntityWithRole: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getfirstentitywithrole'
+    )
     return null
   }
 
   role = role || 'generic'
-
 
   const entitiesForRole = this.getEntities(messagePart, entity)
 
@@ -174,12 +208,16 @@ InitClient.prototype.getFirstEntityWithRole = function getFirstEntityWithRole(me
 */
 InitClient.prototype.getEntities = function getEntities(messagePart, entity) {
   if (!messagePart || !isObject(messagePart)) {
-    this.logError('getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
+    this.logError(
+      'getEntities: A valid MessagePart (Object) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities'
+    )
     return null
   }
 
   if (!entity) {
-    this.logError('getEntities: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities')
+    this.logError(
+      'getEntities: A valid entity (String) is required. View the docs for more: https://docs.init.ai/docs/client-api-methods#section-getentities'
+    )
     return null
   }
 
@@ -198,7 +236,10 @@ InitClient.prototype.getEntities = function getEntities(messagePart, entity) {
 * @param {string} alternativeText – Fallback text to be rendered on platforms where images are not supported
 * @returns {void}
 */
-InitClient.prototype.addImageResponse = function addImageResponse(imageUrl, alternativeText) {
+InitClient.prototype.addImageResponse = function addImageResponse(
+  imageUrl,
+  alternativeText
+) {
   if (!imageUrl) {
     throw new Error(constants.Errors.INVALID_RESPONSE_IMAGE)
   }
@@ -240,13 +281,17 @@ InitClient.prototype.getPostbackData = function getMessageText() {
 * client.addResponse('provide_weather', {'string/condition': 'sunny'})
 * client.addResponse('provide_weather/current', {'string/condition': 'sunny'})
 */
-InitClient.prototype.addResponse = function addResponse(responseName, responseData) {
+InitClient.prototype.addResponse = function addResponse(
+  responseName,
+  responseData
+) {
   if (!isString(responseName)) {
     throw new Error(constants.Errors.INVALID_RESPONSE_NAME)
   }
 
   if (!InitClient.responseTemplatePrefixTest.test(responseName)) {
-    responseName = `${constants.ResponseTemplateTypes.RESPONSE_NAME}${responseName}`
+    responseName = `${constants.ResponseTemplateTypes
+      .RESPONSE_NAME}${responseName}`
   }
 
   this._messageResponsePartsQueue.push({
@@ -265,7 +310,9 @@ InitClient.prototype.addResponse = function addResponse(responseName, responseDa
 * @param {string} responseMessage – The message to send
 * @returns {void}
 */
-InitClient.prototype.addTextResponse = function addTextResponse(responseMessage) {
+InitClient.prototype.addTextResponse = function addTextResponse(
+  responseMessage
+) {
   if (!responseMessage) {
     throw new Error(constants.Errors.INVALID_RESPONSE_MESSAGE)
   }
@@ -276,6 +323,84 @@ InitClient.prototype.addTextResponse = function addTextResponse(responseMessage)
     to: this.getMessagePart().sender.id,
     to_type: constants.IdTypes.APP_USER_ID,
   })
+}
+
+/**
+* Queues a suggested message to be sent
+* @param {Suggestion} suggestion – A suggested message description
+* @returns {void}
+* @example <caption>Example usage:</caption>
+* client.addSuggestion({
+*   intent: 'provide_weather',
+*   data: { city: 'chicago', temp: '72' },
+*   metadata: { src: 'https://weather.api' }
+* })
+*
+* // Adds a "raw" suggested message
+* client.addSuggestion({
+*   text: 'Some message...'
+* })
+*/
+
+const suggestionError = createErrorWithDocsLink(
+  'https://docs.init.ai/docs/node-js-sdk-client-methods#section-addsuggestion'
+)
+
+InitClient.prototype.addSuggestion = function addSuggestion(suggestion) {
+  if (!suggestion) {
+    this.logError(suggestionError('`addSuggestion` requires an Object'))
+
+    throw new Error(constants.Errors.INVALID_SUGGESTED_MESSAGE)
+  }
+
+  if (suggestion.metadata && !isObject(suggestion.metadata)) {
+    this.logError(
+      suggestionError(
+        'Error creating Suggestion – `metadata` must be an Object'
+      )
+    )
+
+    throw new Error(constants.Errors.INVALID_SUGGESTED_MESSAGE)
+  }
+
+  if (suggestion.intent && suggestion.text) {
+    this.logError(
+      suggestionError(
+        'Error creating Suggestion – `text` may not be used with `intent`'
+      )
+    )
+
+    throw new Error(constants.Errors.INVALID_SUGGESTED_MESSAGE)
+  }
+
+  let newSuggestion = {
+    content_type: 'text',
+    suggestion_type: 'message',
+    correlation_id: uuid.v4(),
+  }
+
+  if (suggestion.intent) {
+    newSuggestion.intent = suggestion.intent
+    newSuggestion.data = suggestion.data || {}
+  } else {
+    if (isEmpty(suggestion.text) || !isString(suggestion.text)) {
+      this.logError(
+        suggestionError(
+          'Error creating Suggestion – `text` must be a valid string'
+        )
+      )
+
+      throw new Error(constants.Errors.INVALID_SUGGESTED_MESSAGE)
+    }
+
+    newSuggestion.text = suggestion.text
+  }
+
+  if (suggestion.metadata) {
+    newSuggestion.metadata = suggestion.metadata
+  }
+
+  this._suggestionsQueue.push(newSuggestion)
 }
 
 /**
@@ -293,13 +418,18 @@ InitClient.prototype.addTextResponse = function addTextResponse(responseMessage)
 * replies: [client.makeReplyButton(...), ...]
 *
 */
-InitClient.prototype.addResponseWithReplies = function addResponseWithReplies(responseName, responseData, replies) {
+InitClient.prototype.addResponseWithReplies = function addResponseWithReplies(
+  responseName,
+  responseData,
+  replies
+) {
   if (!isString(responseName)) {
     throw new Error(constants.Errors.INVALID_RESPONSE_NAME)
   }
 
   if (!InitClient.responseTemplatePrefixTest.test(responseName)) {
-    responseName = `${constants.ResponseTemplateTypes.RESPONSE_NAME}${responseName}`
+    responseName = `${constants.ResponseTemplateTypes
+      .RESPONSE_NAME}${responseName}`
   }
 
   this._messageResponsePartsQueue.push({
@@ -308,7 +438,7 @@ InitClient.prototype.addResponseWithReplies = function addResponseWithReplies(re
       response_name: responseName,
       response_data: responseData || null,
       replies_content: replies || [],
-      },
+    },
     to: this.getMessagePart().sender.id,
     to_type: constants.IdTypes.APP_USER_ID,
   })
@@ -325,7 +455,12 @@ InitClient.prototype.addResponseWithReplies = function addResponseWithReplies(re
 * client.addResponseWithReplies('provide_weather', {foo: 'bar'}, [client.makeReplyButton('Next day', 'https://../icon.png', 'check_weather', {})])
 *
 */
-InitClient.prototype.makeReplyButton = function makeReplyButton(text, iconUrl, stream, data) {
+InitClient.prototype.makeReplyButton = function makeReplyButton(
+  text,
+  iconUrl,
+  stream,
+  data
+) {
   return {
     type: constants.ActionTypes.REPLY,
     text: text,
@@ -343,7 +478,9 @@ InitClient.prototype.makeReplyButton = function makeReplyButton(text, iconUrl, s
 * @description Adds a payload to populate a carousel
 * @returns {void}
 */
-InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(payload) {
+InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(
+  payload
+) {
   if (!payload) {
     throw new Error('Carousel List definition is required')
   }
@@ -357,28 +494,36 @@ InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(
   }
 
   const supportedItemKeys = {
-    'title': true,
-    'description': true,
-    'media_url': true,
-    'media_type': true,
-    'actions': true,
+    title: true,
+    description: true,
+    media_url: true,
+    media_type: true,
+    actions: true,
   }
 
   const supportedActionKeys = {
-    'type': true,
-    'text': true,
-    'uri': true,
-    'payload': true,
-    'metadata': true,
+    type: true,
+    text: true,
+    uri: true,
+    payload: true,
+    metadata: true,
   }
 
   payload.items.forEach(item => {
-    if (!item.title || typeof item.title !== 'string' || item.title.length > 80) {
-      throw new Error('title is required to be string, less than 80 characters long')
+    if (
+      !item.title ||
+      typeof item.title !== 'string' ||
+      item.title.length > 80
+    ) {
+      throw new Error(
+        'title is required to be string, less than 80 characters long'
+      )
     }
 
     if (!item.actions || !Array.isArray(item.actions)) {
-      throw new Error('actions is required element of items and must be an array')
+      throw new Error(
+        'actions is required element of items and must be an array'
+      )
     }
 
     if (item.actions.length > 3) {
@@ -398,18 +543,28 @@ InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(
         }
       })
 
-      if (!action.text || typeof action.text !== 'string' || action.text.length > 20) {
-        throw new Error('action text is required to be string, less than 20 characters long')
+      if (
+        !action.text ||
+        typeof action.text !== 'string' ||
+        action.text.length > 20
+      ) {
+        throw new Error(
+          'action text is required to be string, less than 20 characters long'
+        )
       }
 
       switch (action.type) {
         case constants.ActionTypes.POSTBACK:
           if (!action.payload || typeof action.payload !== 'object') {
-            throw new Error('action payload is required for postback actions and must be an object')
+            throw new Error(
+              'action payload is required for postback actions and must be an object'
+            )
           }
 
           if (typeof action.payload.stream !== 'string') {
-            throw new Error('action payload must have a stream value that is a string')
+            throw new Error(
+              'action payload must have a stream value that is a string'
+            )
           }
 
           if (typeof action.payload.data === 'undefined') {
@@ -417,7 +572,9 @@ InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(
           }
 
           if (action.payload.version !== '1') {
-            throw new Error('action payload must have a version value equal to the string \'1\'')
+            throw new Error(
+              "action payload must have a version value equal to the string '1'"
+            )
           }
 
           break
@@ -427,7 +584,7 @@ InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(
           }
           break
         default:
-          throw new Error('action type must be either \'link\' or \'postback\'')
+          throw new Error("action type must be either 'link' or 'postback'")
       }
     })
   })
@@ -448,7 +605,10 @@ InitClient.prototype.addCarouselListResponse = function addCarouselListResponse(
 * @param {object} templateData - The data used to populate your template.
 * @returns {void}
 */
-InitClient.prototype.addTextTemplateResponse = function addTextTemplateResponse(templateString, templateData) {
+InitClient.prototype.addTextTemplateResponse = function addTextTemplateResponse(
+  templateString,
+  templateData
+) {
   if (!isString(templateString)) {
     throw new Error(constants.Errors.INVALID_TEMPLATE_STRING)
   }
@@ -479,10 +639,18 @@ InitClient.prototype.expect = function expect(streamName, classifications) {
   const currentExpectations = {}
   currentExpectations[streamName] = classifications
 
-  logger.log('Recording expection of stream', streamName, 'to receive classifications:', classifications)
+  logger.log(
+    'Recording expection of stream',
+    streamName,
+    'to receive classifications:',
+    classifications
+  )
 
   this.updateConversationState(['currentExpectations'], currentExpectations)
-  this.updateConversationState(['currentExpectationsStreamStack'], this.getStreamStack())
+  this.updateConversationState(
+    ['currentExpectationsStreamStack'],
+    this.getStreamStack()
+  )
 }
 
 /**
@@ -498,7 +666,9 @@ InitClient.prototype.getConversation = function getConversation() {
 * @returns {ConversationState}
 */
 InitClient.prototype.getConversationState = function getConversationState() {
-  return this._messageContext.getIn(['current_conversation', 'state'], {}).toJS()
+  return this._messageContext
+    .getIn(['current_conversation', 'state'], {})
+    .toJS()
 }
 
 /**
@@ -513,7 +683,10 @@ This method implements a <a href="https://facebook.github.io/immutable-js/docs/#
 * @example <caption>Using a keypath and value</caption>
 * client.updateConversationState('foo', {bar: 'baz'})
 */
-InitClient.prototype.updateConversationState = function updateConversationState(objectOrKey, value) {
+InitClient.prototype.updateConversationState = function updateConversationState(
+  objectOrKey,
+  value
+) {
   if (isObject(objectOrKey) && !value) {
     this._messageContext = this._messageContext.updateIn(
       ['current_conversation', 'state'],
@@ -576,7 +749,8 @@ InitClient.prototype.updateUser = function updateUser(id, strategy, value) {
   updateUser(id:String, key:String, value:Any)
 
 Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`
-  const immutableKeyWarningMessage = 'You are attempting to update an immutable key. Only first_name, last_name, remote_id, and metadata may be updated. Your updates will not be persisted'
+  const immutableKeyWarningMessage =
+    'You are attempting to update an immutable key. Only first_name, last_name, remote_id, and metadata may be updated. Your updates will not be persisted'
 
   if (isObject(strategy) && !value) {
     this.logWarning(updateStrategyWarningMessage)
@@ -595,7 +769,10 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`
       this.logWarning(immutableKeyWarningMessage)
     }
 
-    this._messageContext = this._messageContext.setIn(['users', id].concat(keyPath), value)
+    this._messageContext = this._messageContext.setIn(
+      ['users', id].concat(keyPath),
+      value
+    )
   } else {
     const key = strategy
 
@@ -609,7 +786,10 @@ Docs: https://docs.init.ai/docs/client-api-methods#section-updateuser`
         this._user_metadata_updates[id] = value
       }
 
-      this._messageContext = this._messageContext.setIn(['users', id].concat(key), value)
+      this._messageContext = this._messageContext.setIn(
+        ['users', id].concat(key),
+        value
+      )
     } else {
       this.logError(immutableKeyWarningMessage)
     }
@@ -646,8 +826,13 @@ InitClient.prototype.getCurrentApplication = function getCurrentApplication() {
 * @returns {object}
 */
 InitClient.prototype.getCurrentApplicationEnvironment = function getCurrentApplicationEnvironment() {
-  this.logWarning(`getCurrentApplicationEnvironment is deprecated and will be removed in a future version.\n\nPlease use the getEnvironment method\nhttps://docs.init.ai/docs/client-api-methods#section-getenvironment`)
-  return this._messageContext.get('current_application').get('environment').toJS()
+  this.logWarning(
+    `getCurrentApplicationEnvironment is deprecated and will be removed in a future version.\n\nPlease use the getEnvironment method\nhttps://docs.init.ai/docs/client-api-methods#section-getenvironment`
+  )
+  return this._messageContext
+    .get('current_application')
+    .get('environment')
+    .toJS()
 }
 
 /**
@@ -655,9 +840,14 @@ InitClient.prototype.getCurrentApplicationEnvironment = function getCurrentAppli
  * @returns  {object}
  */
 InitClient.prototype.getEnvironment = function getEnvironment() {
-  const environemntVariables = this._messageContext.get('current_application').get('environment').toJS()
+  const environemntVariables = this._messageContext
+    .get('current_application')
+    .get('environment')
+    .toJS()
 
-  return Object.keys(environemntVariables).reduce((newEnvironmentVariables, key) => {
+  return Object.keys(
+    environemntVariables
+  ).reduce((newEnvironmentVariables, key) => {
     const value = environemntVariables[key]
 
     if (value) {
@@ -674,25 +864,28 @@ InitClient.prototype.getEnvironment = function getEnvironment() {
 * @returns {object} Step - An Object containing the configured methods for state management.
  */
 InitClient.prototype.createStep = function createStep(methods) {
-  return Object.assign({}, {
-    expects: function expects() {
-      return []
+  return Object.assign(
+    {},
+    {
+      expects: function expects() {
+        return []
+      },
+
+      extractInfo: function extractInfo() {},
+
+      prompt: function prompt() {},
+
+      next: function next() {
+        return undefined
+      },
+
+      satisfied: function satisfied() {
+        return true
+      },
     },
-
-    extractInfo: function extractInfo() {},
-
-    prompt: function prompt() {},
-
-    next: function next() {
-      return undefined
-    },
-
-    satisfied: function satisfied() {
-      return true
-    },
-  }, methods)
+    methods
+  )
 }
-
 
 /**
  * Initiate a Flow sequence.
@@ -714,36 +907,118 @@ InitClient.prototype.runFlow = function _runFlow(flowDefinition) {
 }
 
 /**
+ * Retrieve composed state from logic invocation run
+ *
+ * @return {LogicResult}
+ */
+InitClient.prototype.getLogicResult = function getLogicResult() {
+  return {
+    version: VERSION,
+    payload: {
+      conversation_state: this.getConversationState(),
+      execution_id: this._executionData.get('execution_id'),
+      messages: [{ parts: this._messageResponsePartsQueue }],
+      reset_users: this._usersToReset,
+      suggestions: this._suggestionsQueue,
+      user_metadata_updates: this._user_metadata_updates,
+      users_patch: jiff.diff(this._originalUsers, this.getUsers()),
+    },
+  }
+}
+
+/**
 * Signal that you have completed processing this message and would like to send your reply (or queued replies) the the user.
 * You should call this only when you are ready to immediately terminate your message processing function.
 * @returns {void}
 */
 InitClient.prototype.done = function done() {
-  this._lambdaContext.succeed({
-    version: VERSION,
-    payload: {
-      execution_id: this._executionData.get('execution_id'),
-      conversation_state: this.getConversationState(),
-      conversation_state_patch: jiff.diff(
-        this._originalMessageContext.payload.current_conversation.state,
-        this.getConversationState()
-      ),
-      user_metadata_updates: this._user_metadata_updates,
-      users_patch: jiff.diff(
-        this._originalUsers,
-        this.getUsers()
-      ),
-      reset_users: this._usersToReset,
-      messages: [
-        {parts: this._messageResponsePartsQueue},
-      ],
+  if (this._lambdaContext.succeed) {
+    this._lambdaContext.succeed(this.getLogicResult())
+  } else {
+    this.logError(
+      'You must provide a valid `succeed` callback when setting up your client. ' +
+        SEND_RESULT_UPGRADE_MESSAGE
+    )
+  }
+}
+
+/**
+ * Send logic invocation result to Init.ai API
+ *
+ * @return {Promise<InvocationResultSuccess | InvocationResultError>}
+ */
+InitClient.prototype.sendResult = function sendResult() {
+  if (this._lambdaContext && this._lambdaContext.succeed) {
+    this.logWarning(
+      'It appears you are using `sendResult` in conjunction with a `succeed` callback. We recommend you use `sendResult` only'
+    )
+  }
+
+  const invocationId = this._messageContext
+    .get('invocation_data')
+    .get('invocation_id')
+  const authToken = this._messageContext
+    .get('invocation_data')
+    .get('auth_token')
+  const baseURL = this._messageContext
+    .get('invocation_data')
+    .get('api')
+    .get('base_url')
+  const appUserId = this._messageContext.get('users').keys().next().value
+  const appId = this._messageContext.get('current_application').get('id')
+  const url = `${baseURL}/api/v1/remote/logic/invocations/${invocationId}/result`
+  const headers = {
+    authorization: `Bearer ${authToken}`,
+    'content-type': 'application/json',
+  }
+  const logicResult = this.getLogicResult()
+  const body = JSON.stringify({
+    invocation: {
+      app_id: appId,
+      app_user_id: appUserId,
+      invocation_id: invocationId,
     },
+    result: logicResult,
+  })
+  const method = 'POST'
+
+  return fetch(url, { method, headers, body }).then(response => {
+    if (response.status === 200) {
+      return response.json()
+    } else {
+      return response.json().then(data => {
+        if (data.body && !data.body.accepted && data.body.errors) {
+          const errorMessage = prettyPrintValidationErrors(
+            data.body.errors,
+            logicResult.payload.suggestions
+          )
+
+          this.logError(errorMessage)
+
+          return Promise.reject({
+            status: response.status,
+            message: constants.Errors.SEND_RESULTS_VALIDATION_FAILURE,
+            type: 'VALIDATION_ERROR',
+          })
+        }
+
+        return Promise.reject({
+          status: response.status,
+          message: constants.Errors.SEND_RESULTS_NETWORK_FAILURE,
+          type: 'API_ERROR',
+        })
+      })
+    }
   })
 }
 
-InitClient.constants = InitClient.prototype.constants = Immutable.fromJS(constants).toJS()
+InitClient.constants = InitClient.prototype.constants = Immutable.fromJS(
+  constants
+).toJS()
 
-InitClient.responseTemplatePrefixTest = new RegExp(`^${constants.ResponseTemplateTypes.RESPONSE_NAME}`)
+InitClient.responseTemplatePrefixTest = new RegExp(
+  `^${constants.ResponseTemplateTypes.RESPONSE_NAME}`
+)
 
 module.exports = {
   InitClient,

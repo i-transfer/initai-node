@@ -9,7 +9,10 @@ const logger = require('../../../logger')
 const isFunction = _.isFunction
 
 function runStepAndGetNewState(state, streams, client) {
-  const currentlyActiveStep = getCurrentlyActiveStep(streams[state.get('streamName')], state)
+  const currentlyActiveStep = getCurrentlyActiveStep(
+    streams[state.get('streamName')],
+    state
+  )
 
   if (!currentlyActiveStep) {
     return state
@@ -21,10 +24,14 @@ function runStepAndGetNewState(state, streams, client) {
   // If the currentlyActiveStep is a pointer to a stream,
   // initialize running that stream
   if (isStream(streams, currentlyActiveStep)) {
-    return runStepAndGetNewState(state.merge({
-      streamName: currentlyActiveStep,
-      stepIndex: 0,
-    }), streams, client)
+    return runStepAndGetNewState(
+      state.merge({
+        streamName: currentlyActiveStep,
+        stepIndex: 0,
+      }),
+      streams,
+      client
+    )
   }
 
   // If the current step is satisfied, run the next step
@@ -50,18 +57,23 @@ function runStepAndGetNewState(state, streams, client) {
     } else {
       let promptFn = currentlyActiveStep.prompt
       let promptHandler = promptAction => {
-
         let proceedFn = () => {
-          logger.log('Received init.proceed instruction from stream', state.get('streamName'), 'step number', state.get('stepIndex'))
+          logger.log(
+            'Received init.proceed instruction from stream',
+            state.get('streamName'),
+            'step number',
+            state.get('stepIndex')
+          )
 
           let newStep = getNextStep(currentlyActiveStep, streams, state)
-          logger.log('After init.proceed, found new step?', Boolean(newStep), ':', newStep)
-
-          runStepAndGetNewState(
-            newStep,
-            streams,
-            client
+          logger.log(
+            'After init.proceed, found new step?',
+            Boolean(newStep),
+            ':',
+            newStep
           )
+
+          runStepAndGetNewState(newStep, streams, client)
         }
 
         switch (promptAction) {
@@ -71,16 +83,40 @@ function runStepAndGetNewState(state, streams, client) {
           default:
             if (promptAction) {
               if (isStream(streams, promptAction)) {
-                logger.log('Prompt from stream', state.get('streamName'), 'step number', state.get('stepIndex'), 'returned to route to stream:', promptAction)
-                runStepAndGetNewState(state.merge({
-                  streamName: promptAction,
-                  stepIndex: 0,
-                }), streams, client)
+                logger.log(
+                  'Prompt from stream',
+                  state.get('streamName'),
+                  'step number',
+                  state.get('stepIndex'),
+                  'returned to route to stream:',
+                  promptAction
+                )
+                runStepAndGetNewState(
+                  state.merge({
+                    streamName: promptAction,
+                    stepIndex: 0,
+                  }),
+                  streams,
+                  client
+                )
               } else {
-                logger.log('Prompt from stream', state.get('streamName'), 'step number', state.get('stepIndex'), 'returned to route to INVALID stream:', promptAction)
+                logger.log(
+                  'Prompt from stream',
+                  state.get('streamName'),
+                  'step number',
+                  state.get('stepIndex'),
+                  'returned to route to INVALID stream:',
+                  promptAction
+                )
               }
             } else {
-              logger.log('Prompt from stream', state.get('streamName'), 'step number', state.get('stepIndex'), 'did not return next instructions')
+              logger.log(
+                'Prompt from stream',
+                state.get('streamName'),
+                'step number',
+                state.get('stepIndex'),
+                'did not return next instructions'
+              )
             }
         }
       }

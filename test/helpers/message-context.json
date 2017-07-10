@@ -2,26 +2,29 @@
   "version": "1",
   "format": "plain_object",
   "payload": {
+    "deprecation_warning": "WARNING: do not use the fields current_conversation.__private_temp_user_id, execution_data, current_application.external_name, scripts, or common_scripts. These may be removed at any time.",
     "execution_data": {
-      "execution_id": "au5m8lfu31ktu9xv3tphpl48cawo0yho",
+      "execution_id": "42389e33-dd38-4cf7-5ef3-a0b28d933fe4",
       "execution_mode": "",
-      "initiated_at": "2016-05-26T18:41:48.013930269-04:00",
-      "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiI0ZWU1OTMwYS01YjM3LTQ1NTEtNzYxNS04YjdlMWQ2YjdhNTYiLCJleHAiOjE0NjQzMDYxMDgsImlhdCI6MTQ2NDMwMjUwOCwiaW52b2NhdGlvbl9pZCI6ImF1NW04bGZ1MzFrdHU5eHYzdHBocGw0OGNhd28weWhvIiwiaXNzIjoicGxhdGZvcm0iLCJzY29wZXMiOlsicmVtb3RlIl0sInR5cGUiOiJzY3JpcHQifQ.VrOwo1TjbSlOy7UAUJjjloOGekP1AQdEtdH73lpUx0U",
+      "deprecation_warning": "WARNING: execution_data is deprecated and may be removed at any time. Use invocation_data instead.",
+      "initiated_at": "2017-06-19T15:49:31.106958553Z",
+      "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiIzMDQ5NDhlMC03ZDkwLTQ5NTktNmQ3Ni1lNTAwMDEyMGYwZjEiLCJleHAiOjE0OTc4OTA5NzEsImlhdCI6MTQ5Nzg4NzM3MSwiaW52b2NhdGlvbl9pZCI6IjQyMzg5ZTMzLWRkMzgtNGNmNy01ZWYzLWEwYjI4ZDkzM2ZlNCIsImlzcyI6InBsYXRmb3JtIiwidHlwZSI6InJlbW90ZSJ9.puINDzay7by0OS1SYXee4MvKCLXrWjDAP7mBr4DV8_8",
       "api": {
-        "base_url": "https://init-dev-k.ngrok.io"
+        "base_url": "https://s-api.init.ai"
       },
       "logging": {
         "level": "DEBUG"
-      },
-      "conversation_message_index_to_process": 0
-    },
-    "scripts": {
-      "index.js": {
-        "id": "31fef079-1f54-45f0-76ae-f34f58fbf62d",
-        "source_code": "// INIT_VERSION: 0.0.15\n\n'use strict'\n\nconst _ = require('lodash')\n\nexports.handle = function handle(client) {\n\n  const sayHello = client.createStep({\n    satisfied() {\n      return Boolean(client.getConversationState().helloSent)\n    },\n\n    prompt() {\n      client.addTextResponse('Hello world')\n      return 'init.proceed'\n    }\n  })\n\n  const untrained = client.createStep({\n    satisfied() {\n      return false\n    },\n\n    prompt() {\n      client.addTextResponse('Apologies, but this app needs to go back to school!')\n      client.done()\n    }\n  })\n\n  client.runFlow({\n    classifications: {\n\n    },\n    autoResponses: {\n      _continuation: {\n        ignore: true,\n        minimumConfidence: 0.9\n      },\n      welcome: {\n        minimumConfidence: 0.5\n      },\n      you_are_welcome: {\n        minimumConfidence: 0.5\n      }\n    },\n    streams: {\n      end: [untrained],\n      main: [sayHello],\n    }\n  })\n}\n",
-        "md5": "c70c4e05d6b61c9b6c077928cd560c70"
       }
     },
+    "invocation_data": {
+      "invocation_id": "42389e33-dd38-4cf7-5ef3-a0b28d933fe4",
+      "initiated_at": "2017-06-19T15:49:31.106958553Z",
+      "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiIzMDQ5NDhlMC03ZDkwLTQ5NTktNmQ3Ni1lNTAwMDEyMGYwZjEiLCJleHAiOjE0OTc4OTA5NzEsImlhdCI6MTQ5Nzg4NzM3MSwiaW52b2NhdGlvbl9pZCI6IjQyMzg5ZTMzLWRkMzgtNGNmNy01ZWYzLWEwYjI4ZDkzM2ZlNCIsImlzcyI6InBsYXRmb3JtIiwidHlwZSI6InJlbW90ZSJ9.puINDzay7by0OS1SYXee4MvKCLXrWjDAP7mBr4DV8_8",
+      "api": {
+        "base_url": "https://s-api.init.ai"
+      }
+    },
+    "scripts": null,
     "common_scripts": null,
     "current_conversation": {
       "state": {
@@ -153,7 +156,7 @@
     },
     "current_application": {
       "internal_name": "",
-      "id": "4ee5930a-5b37-4551-7615-8b7e1d6b7a56",
+      "id": "304948e0-7d90-4959-6d76-e5000120f0f1",
       "external_name": "",
       "environment": {
         "common": {
@@ -164,7 +167,8 @@
             "three": "MyEnvValue"
           }
         }
-      }
+      },
+      "outbound_message_templates": {}
     }
   }
 }

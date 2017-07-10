@@ -1,3 +1,9 @@
+# 0.0.14 / 2017-07-10
+
+* Introduce `addSuggestion` method
+* Introduce `sendResult` method
+* Introduce [Prettier](https://prettier.github.io/prettier)
+
 # 0.0.13 / 2017-05-27
 
 * Fix an issue where `expect` would not clear previous expectations

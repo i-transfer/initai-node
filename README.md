@@ -16,7 +16,7 @@ npm i -S initai-node
 
 ## Usage
 
-> For a detailed reference, visit: https://docs.init.ai/v2.0/docs/node-js-sdk
+> For a detailed reference, visit: [https://docs.init.ai/docs/node-js-sdk](https://docs.init.ai/docs/node-js-sdk)
 
 Before starting, ensure you have a webhook configured to handle a logic invocation.
 
@@ -31,13 +31,21 @@ const InitClient = require('initai-node')
 The payload sent to your webhook for the `LogicInvocation` event (See [webhooks](https://docs.init.ai/docs/webhooks#section-logicinvocation) docs) contains an Object for you to provide to your client instance.
 
 * `data`: Object – The logic invocation data received from your webhook. ([Docs](https://docs.init.ai/docs/webhooks#section-logicinvocation))
-* `options`: Object - A configuration object that _must_ include a `succeed` callback
-  * `succeed`: Function – A callback that will be invoked when calling `client.done()`. This callback takes a `LogicResult` object as its only argument. The `LogicResult` object must be provided in your API response for the logic invocation.
 
 ```js
-const client = InitClient.create(data, {succeed: (result) => {
-  // Send `result` to Init.ai
-})
+const client = InitClient.create(data)
+```
+
+**Sending the logic result**
+
+Prior to version `0.0.14,` it was required that you manually send a logic invocation result to our API. With version `0.0.14`, a new method `sendResult` was added which handles this call for you.
+
+```js
+const client = new InitClient.create(data)
+const done = () => client.sendResult().then(() => console.log('Done!'))
+
+client.addResponse('provide_gametime', { team: 'Chicago Cubs' })
+done()
 ```
 
 ## Development

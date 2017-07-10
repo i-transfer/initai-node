@@ -31,6 +31,7 @@ describe('flowRunner', () => {
       fail: sandbox.stub()
     }
 
+    sandbox.stub(initClient.InitClient.prototype, 'logWarning')
     fakeClient = initClient.create(fakeMessageContext, fakeLambdaContext)
     fakeClientWithEvent = initClient.create(fakeMessageEventContext, fakeLambdaContext)
 
